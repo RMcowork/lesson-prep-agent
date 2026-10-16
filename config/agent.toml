@@ -1,0 +1,16 @@
+# Which LLM the standalone agent uses.
+#
+# provider = "anthropic"  -> Claude API. Needs ANTHROPIC_API_KEY in .env
+# provider = "openai"     -> any OpenAI-compatible API (OpenAI, OpenRouter, Ollama, LM Studio...).
+#                            Needs OPENAI_API_KEY in .env (use any value for Ollama) and base_url.
+#
+# Examples for a local model:
+#   provider = "openai"
+#   model = "qwen2.5:14b"
+#   base_url = "http://localhost:11434/v1"
+
+provider = "anthropic"
+model = "claude-sonnet-5-5"
+base_url = ""
+max_tokens = 8000
+max_turns = 40
