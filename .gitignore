@@ -3,8 +3,9 @@ knowledge/*
 !knowledge/.gitkeep
 output/*
 !output/.gitkeep
-rag/index/
-rag/.venv/
+rag-index/
+.venv/
+.env
 
 # Personal memory (keep only the index template)
 memory/*
@@ -15,3 +16,4 @@ memory/*
 __pycache__/
 *.pyc
 .claude/settings.local.json
+logs/

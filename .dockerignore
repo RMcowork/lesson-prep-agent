@@ -1,0 +1,10 @@
+.venv/
+.git/
+.env
+knowledge/*
+output/*
+memory/*
+!memory/INDEX.md
+rag/index/
+rag-index/
+__pycache__/

@@ -1,0 +1,8 @@
+-r rag/requirements.txt
+anthropic>=0.40
+openai>=1.50
+ddgs>=9.0
+httpx>=0.27
+python-dotenv>=1.0
+arabic-reshaper>=3.0
+python-bidi>=0.5
