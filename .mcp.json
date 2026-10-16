@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rag": {
+      "command": "rag/.venv/bin/python",
+      "args": ["rag/server.py"]
+    }
+  }
+}

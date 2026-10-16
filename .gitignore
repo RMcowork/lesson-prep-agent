@@ -1,0 +1,17 @@
+# Private teacher material and generated output
+knowledge/*
+!knowledge/.gitkeep
+output/*
+!output/.gitkeep
+rag/index/
+rag/.venv/
+
+# Personal memory (keep only the index template)
+memory/*
+!memory/INDEX.md
+
+# Misc
+.DS_Store
+__pycache__/
+*.pyc
+.claude/settings.local.json
