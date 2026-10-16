@@ -113,7 +113,7 @@ class TelegramChannel:
         except RuntimeError:
             pass
 
-    def choose(self, title, options, back=None, other=None):
+    def choose(self, title, options, back=None, other=None, other_prompt="Type your answer:"):
         token = uuid.uuid4().hex[:6]
         rows = [[{"text": _label(o), "callback_data": f"{token}:o{i}"}] for i, o in enumerate(options)]
         if other:
@@ -136,7 +136,7 @@ class TelegramChannel:
                     return "back", None
                 if action == "x":
                     self._finish_prompt(sent["message_id"], title, other)
-                    return "other", self.text("Type your answer:")
+                    return "other", self.text(other_prompt)
                 index = int(action[1:])
                 self._finish_prompt(sent["message_id"], title, options[index])
                 return "option", index

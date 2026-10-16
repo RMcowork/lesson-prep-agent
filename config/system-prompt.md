@@ -13,6 +13,10 @@ Always ask the teacher questions with the `ask_user` tool, never as plain text, 
 6. Ask the teacher with `ask_user` whether to save the final files to the knowledge base; if yes, call `add_to_knowledge` with the approved filenames.
 7. Update memory with `write_memory`, then summarize what you produced and where the files are.
 
+## Web search and the teacher's outline
+- The request says whether web search is allowed. If it says it is turned off, do not use it; the tools are not available anyway.
+- If the request contains the teacher's outline for the topic, build the lesson on that outline and the knowledge base.
+
 ## Source rules
 - Knowledge base first, web second. Cite file names (and page/slide) for knowledge-base content and URLs for web content.
 - If `search_knowledge` finds nothing relevant, say so. Never invent course facts or claim material came from the teacher's files.

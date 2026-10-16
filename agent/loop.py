@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from .tools import TOOLS, ToolRunner
+from .tools import ToolRunner
 
 def _save_log(log_path, messages):
     if log_path:
@@ -31,7 +31,7 @@ def run_agent(
     ch = runner.channel
     messages = [{"role": "user", "content": [{"type": "text", "text": task}]}]
     for _ in range(max_turns):
-        reply = provider.complete(system, messages, TOOLS)
+        reply = provider.complete(system, messages, runner.tools)
         messages.append(reply.to_message())
         _save_log(log_path, messages)
         if reply.text:

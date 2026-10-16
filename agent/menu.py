@@ -23,7 +23,7 @@ def _read(ask, prompt="Choose a number: "):
         raise SystemExit("\nStopped.")
 
 
-def choose(title, options, ask=_input, back=None, other=None):
+def choose(title, options, ask=_input, back=None, other=None, other_prompt="Type your answer: "):
     """Show a numbered menu. Returns ("option", index) | ("back", None) | ("other", text)."""
     while True:
         ui.show(f"\n{title}")
@@ -42,7 +42,7 @@ def choose(title, options, ask=_input, back=None, other=None):
             if 1 <= n <= len(options):
                 return "option", n - 1
             if other and n == other_no:
-                typed = ask("Type your answer: ").strip()
+                typed = ask(other_prompt + " ").strip()
                 if typed:
                     return OTHER, typed
         ui.show("Please enter one of the numbers shown.")
@@ -65,17 +65,6 @@ def choose_many(title, options, defaults, ask=_input, back="Back"):
         if parts and all(p.isdigit() and 1 <= int(p) <= len(options) for p in parts):
             return "option", sorted({int(p) - 1 for p in parts})
         ui.show("Please enter numbers from the list, for example: 1,3")
-
-
-def load_units(outline_path: Path):
-    """Read the unit names from the markdown table in config/course-outline.md."""
-    units = []
-    if outline_path.exists():
-        for line in outline_path.read_text(encoding="utf-8").splitlines():
-            cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            if len(cells) >= 2 and cells[0].isdigit():
-                units.append(cells[1])
-    return units
 
 
 def run_steps(steps):
@@ -130,7 +119,91 @@ LEVELS = ["Mixed class", "Support (easier)", "Core", "Extension (harder)"]
 MINUTES = ["30", "45", "60", "90"]
 
 
-def lesson_wizard(units, ch):
+WEB_CHOICES = ["No, use my files only", "Yes, you may search the web"]
+
+
+def _topic_step(ch, store):
+    """Pick a topic, or add a new one (optionally saved for next time)."""
+
+    def step(state):
+        names = store.names()
+        kind, value = ch.choose(
+            "Which topic?",
+            names,
+            back="Back",
+            other="Add a new topic",
+            other_prompt="Name of the new topic:",
+        )
+        if kind == BACK:
+            return BACK
+        if kind != OTHER:
+            state["topic"] = names[value]
+            state["outline"] = store.outline(names[value])
+            return None
+        name = value.strip()
+        known = [n for n in names if n.lower() == name.lower()]
+        if known:  # already in the list: just use it
+            state["topic"], state["outline"] = known[0], store.outline(known[0])
+            return None
+        state["topic"], state["outline"] = name, ask_outline(ch)
+        _, save = ch.choose(
+            "Save this topic to your list for next time?", ["Yes, save it", "No, use it once"]
+        )
+        if save == 0 and store.add(name, state["outline"]):
+            ch.say("Saved. It will be in the topic list next time.")
+        return None
+
+    return step
+
+
+def ask_outline(ch) -> str:
+    text = ch.text("Type the outline or main points for this topic on one line, or send - to skip:")
+    return "" if text.strip() in ("", "-") else text.strip()
+
+
+def manage_topics(ch, store):
+    """Add, remove or list the teacher's own topics."""
+    while True:
+        kind, choice = ch.choose(
+            "My topics", ["Add a topic", "Remove one of my topics", "Show all topics"], back="Back"
+        )
+        if kind == BACK:
+            return
+        if choice == 0:
+            name = ch.text("Name of the new topic:").strip()
+            if not name:
+                continue
+            if store.add(name, ask_outline(ch)):
+                ch.say(f"Added: {name}")
+            else:
+                ch.say("That topic is already in the list.")
+        elif choice == 1:
+            mine = store.custom_names()
+            if not mine:
+                ch.say("You have not added any topics yet.")
+                continue
+            k, i = ch.choose("Remove which topic?", mine, back="Back")
+            if k != BACK and store.remove(mine[i]):
+                ch.say(f"Removed: {mine[i]}")
+        else:
+            lines = [f"  - {n}" + (" (mine)" if store.is_custom(n) else "") for n in store.names()]
+            ch.say("Topics:\n" + "\n".join(lines))
+
+
+def _task_tail(state):
+    outline = state.get("outline")
+    tail = ""
+    if outline:
+        tail += f" The teacher's outline for this topic (follow it where possible): {outline}."
+    tail += (
+        " Web search is allowed, but only for fresh examples the knowledge base lacks."
+        if state["web"]
+        else " Web search is turned off: do not use it."
+    )
+    return tail + " The teacher chose these options from a menu, so do not ask for them again."
+
+
+def lesson_wizard(store, ch):
     outputs = [
         "Lesson plan (.docx)",
         "Student worksheet (.docx)",
@@ -139,12 +212,13 @@ def lesson_wizard(units, ch):
         "Excel exercise file (.xlsx)",
     ]
     steps = [
-        _single("topic", "Which unit?", units, ch, other="Another topic (type it)"),
+        _topic_step(ch, store),
         _single("minutes", "Lesson length (minutes)?", MINUTES, ch),
         _single("language", "Language of the materials?", LANGS, ch, labels=LANG_NAMES),
         _single("grade", "Grade?", GRADES, ch),
         _single("level", "Level of the class?", LEVELS, ch),
         _multi("outputs", "What should I create?", outputs, {0, 1, 2}, ch),
+        _single("web", "Search the web for fresh examples if needed?", WEB_CHOICES, ch, labels=[False, True]),
         _confirm(
             lambda s: [
                 ("Topic", s["topic"]),
@@ -153,6 +227,7 @@ def lesson_wizard(units, ch):
                 ("Grade", s["grade"]),
                 ("Level", s["level"]),
                 ("Create", ", ".join(s["outputs"])),
+                ("Web search", "on" if s["web"] else "off"),
             ],
             ch,
         ),
@@ -163,13 +238,13 @@ def lesson_wizard(units, ch):
     task = (
         f"Prepare a lesson. Topic: {state['topic']}. Grade: {state['grade']}. "
         f"Length: {state['minutes']} minutes. Language: {state['language']}. "
-        f"Class level: {state['level']}. Create: {', '.join(state['outputs'])}. "
-        "The teacher chose these options from a menu, so do not ask for them again."
+        f"Class level: {state['level']}. Create: {', '.join(state['outputs'])}."
+        + _task_tail(state)
     )
-    return task, state["topic"]
+    return task, state["topic"], {"allow_web": state["web"]}
 
 
-def exam_wizard(units, ch):
+def exam_wizard(store, ch):
     kinds = ["Short quiz (10-15 min)", "Test (30-45 min)", "Full exam (60-90 min)"]
     qtypes = [
         "Multiple choice",
@@ -179,11 +254,12 @@ def exam_wizard(units, ch):
         "True / false",
     ]
     steps = [
-        _single("topic", "Which unit?", units, ch, other="Another topic (type it)"),
+        _topic_step(ch, store),
         _single("kind", "Type of assessment?", kinds, ch),
         _single("language", "Language?", LANGS, ch, labels=LANG_NAMES),
         _single("grade", "Grade?", GRADES, ch),
         _multi("qtypes", "Question types?", qtypes, {0, 1}, ch),
+        _single("web", "Search the web for fresh examples if needed?", WEB_CHOICES, ch, labels=[False, True]),
         _confirm(
             lambda s: [
                 ("Topic", s["topic"]),
@@ -191,6 +267,7 @@ def exam_wizard(units, ch):
                 ("Language", s["language"]),
                 ("Grade", s["grade"]),
                 ("Questions", ", ".join(s["qtypes"])),
+                ("Web search", "on" if s["web"] else "off"),
             ],
             ch,
         ),
@@ -201,7 +278,7 @@ def exam_wizard(units, ch):
     task = (
         f"Prepare an assessment with answer key and grading rubric. Topic: {state['topic']}. "
         f"Type: {state['kind']}. Grade: {state['grade']}. Language: {state['language']}. "
-        f"Question types: {', '.join(state['qtypes'])}. "
-        "The teacher chose these options from a menu, so do not ask for them again."
+        f"Question types: {', '.join(state['qtypes'])}."
+        + _task_tail(state)
     )
-    return task, "exam-" + state["topic"]
+    return task, "exam-" + state["topic"], {"allow_web": state["web"]}

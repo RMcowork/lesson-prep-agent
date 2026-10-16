@@ -188,12 +188,23 @@ def _is_public_url(url: str) -> bool:
     return True
 
 
+WEB_TOOLS = {"web_search", "fetch_url"}
+
+
 class ToolRunner:
-    def __init__(self, out_dir: Path, channel=None):
+    def __init__(self, out_dir: Path, channel=None, allow_web: bool = True):
         self.out_dir = Path(out_dir).resolve()
         self.channel = channel or TerminalChannel()
+        self.allow_web = allow_web
+
+    @property
+    def tools(self):
+        """Tool definitions offered to the model; web tools are left out when web search is off."""
+        return [t for t in TOOLS if self.allow_web or t["name"] not in WEB_TOOLS]
 
     def run(self, name: str, args: dict) -> str:
+        if name in WEB_TOOLS and not self.allow_web:
+            raise ValueError("Web search is turned off for this session.")
         handler = getattr(self, f"_t_{name}", None)
         if handler is None:
             raise ValueError(f"Unknown tool: {name}")
@@ -222,9 +233,18 @@ class ToolRunner:
     def _t_web_search(self, query):
         from ddgs import DDGS
 
-        results = DDGS().text(query, max_results=6)
+        results = []
+        # DuckDuckGo directly is fast and handles Arabic/Hebrew; the automatic mode
+        # (several engines in turn) is only a fallback because slow engines can time out.
+        for backend, timeout in (("duckduckgo", 10), ("auto", 20)):
+            try:
+                results = DDGS(timeout=timeout).text(query, max_results=6, backend=backend)
+            except Exception:
+                results = []
+            if results:
+                break
         if not results:
-            return "No results."
+            return "No web results (the search service may be unavailable). Continue without them."
         lines = [f"{r['title']}\n{r['href']}\n{r['body']}" for r in results]
         return "UNTRUSTED WEB RESULTS:\n\n" + "\n\n".join(lines)
 

@@ -13,7 +13,8 @@ import tomllib
 from datetime import date
 from pathlib import Path
 
-from . import menu
+from . import emailer, menu
+from .topics import TopicStore
 from .channel import TerminalChannel
 from .llm import make_provider
 from .loop import run_agent
@@ -52,7 +53,7 @@ def slug(text: str) -> str:
     return re.sub(r"[^\w]+", "-", text.strip().lower(), flags=re.UNICODE).strip("-")[:40] or "session"
 
 
-def run_session(provider, cfg, task: str, name: str, ch, lock=None):
+def run_session(provider, cfg, task: str, name: str, ch, lock=None, allow_web: bool = True):
     folder = f"{date.today().isoformat()}-{slug(name)}"
     out_dir = DATA / "output" / folder
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -64,7 +65,7 @@ def run_session(provider, cfg, task: str, name: str, ch, lock=None):
     try:
         ch.say("Working on it. This can take a few minutes.")
         run_agent(
-            provider, build_system(), task, ToolRunner(out_dir, ch),
+            provider, build_system(), task, ToolRunner(out_dir, ch, allow_web),
             int(cfg.get("max_turns", 40)), log_path=log_path,
         )
     finally:
@@ -75,19 +76,56 @@ def run_session(provider, cfg, task: str, name: str, ch, lock=None):
     ch.send_files(files)
     if isinstance(ch, TerminalChannel):
         ch.say(f"Session log: {log_path}")
+    offer_email(ch, files, name)
 
 
-def main_menu(cfg, ch, provider=None, lock=None):
-    units = menu.load_units(ROOT / "config" / "course-outline.md")
+def offer_email(ch, files, name: str):
+    """Ask whether to email the files. Nothing is sent unless the teacher says yes."""
+    if not files or not emailer.configured():
+        return
+    defaults = emailer.default_recipients()
+    options = [f"Yes, send to {a}" for a in defaults]
+    kind, value = ch.choose(
+        "Email these files?", options, back="No, thanks", other="Send to another address"
+    )
+    if kind == "back":
+        return
+    if kind == "other":
+        to = value
+    else:
+        to = defaults[value]
+    if not emailer.is_address(to):
+        ch.say("That does not look like an email address, so nothing was sent.")
+        return
+    names = "\n".join(f"- {p.name}" for p in files)
+    try:
+        ch.say(emailer.send_files(
+            to, f"Lesson materials: {name}", f"Files prepared by the lesson-prep agent:\n{names}\n", files
+        ))
+    except (RuntimeError, ValueError) as exc:
+        ch.say(f"Email not sent: {exc}")
+
+
+def main_menu(cfg, ch, provider=None, lock=None, store=None):
+    store = store or TopicStore()
     while True:
         kind, choice = ch.choose(
             "Lesson-prep agent: what would you like to do?",
-            ["Prepare a lesson", "Prepare a quiz or exam", "Index my knowledge files", "Free chat (type a request)"],
+            [
+                "Prepare a lesson",
+                "Prepare a quiz or exam",
+                "Manage my topics",
+                "Index my knowledge files",
+                "Free chat (type a request)",
+            ],
             back="Exit",
         )
         if kind == "back":
             return
         if choice == 2:
+            menu.manage_topics(ch, store)
+            continue
+        if choice == 3:
             from rag import core
 
             ch.say("Indexing... the first run downloads the embedding model and can take a while.")
@@ -96,14 +134,19 @@ def main_menu(cfg, ch, provider=None, lock=None):
         if provider is None:
             provider = make_provider(cfg)
         if choice == 0:
-            result = menu.lesson_wizard(units, ch)
+            result = menu.lesson_wizard(store, ch)
         elif choice == 1:
-            result = menu.exam_wizard(units, ch)
+            result = menu.exam_wizard(store, ch)
         else:
             text = ch.text("What do you need?")
-            result = (text, "chat") if text else None
+            if text:
+                _, web = ch.choose("Search the web if needed?", menu.WEB_CHOICES)
+                result = (text, "chat", {"allow_web": web == 1})
+            else:
+                result = None
         if result:
-            run_session(provider, cfg, *result, ch, lock)
+            task, name, options = result
+            run_session(provider, cfg, task, name, ch, lock, **options)
 
 
 def telegram_main(cfg):
