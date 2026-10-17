@@ -21,15 +21,23 @@ def run_agent(
     max_turns: int = 40,
     interactive: bool = True,
     log_path=None,
+    messages=None,
 ):
-    """Run until the model finishes.
+    """Run until the model finishes. Pass `messages` to continue an earlier conversation
+    (for example to apply the teacher's requested changes).
 
     When the model replies with text and no tool call, an interactive session shows a
     menu (continue / type a reply / finish). This covers questions the model asks in plain
     text instead of through `ask_user`.
     """
     ch = runner.channel
-    messages = [{"role": "user", "content": [{"type": "text", "text": task}]}]
+    block = {"type": "text", "text": task}
+    if messages is None:
+        messages = [{"role": "user", "content": [block]}]
+    elif messages[-1]["role"] == "user":  # a previous run stopped mid-way: keep roles alternating
+        messages[-1]["content"].append(block)
+    else:
+        messages.append({"role": "user", "content": [block]})
     for _ in range(max_turns):
         reply = provider.complete(system, messages, runner.tools)
         messages.append(reply.to_message())

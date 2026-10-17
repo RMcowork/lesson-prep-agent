@@ -156,6 +156,25 @@ def _topic_step(ch, store):
     return step
 
 
+def _notes_step(ch):
+    """Optional free-text instructions that the agent must follow."""
+
+    def step(state):
+        kind, value = ch.choose(
+            "Any special instructions to include or avoid?",
+            ["No, go ahead"],
+            back="Back",
+            other="Yes, add my instructions",
+            other_prompt="Type your instructions:",
+        )
+        if kind == BACK:
+            return BACK
+        state["notes"] = value.strip() if kind == OTHER else ""
+        return None
+
+    return step
+
+
 def ask_outline(ch) -> str:
     text = ch.text("Type the outline or main points for this topic on one line, or send - to skip:")
     return "" if text.strip() in ("", "-") else text.strip()
@@ -193,6 +212,8 @@ def manage_topics(ch, store):
 def _task_tail(state):
     outline = state.get("outline")
     tail = ""
+    if state.get("notes"):
+        tail += f" The teacher's special instructions (follow them exactly): {state['notes']}."
     if outline:
         tail += f" The teacher's outline for this topic (follow it where possible): {outline}."
     tail += (
@@ -219,6 +240,7 @@ def lesson_wizard(store, ch):
         _single("level", "Level of the class?", LEVELS, ch),
         _multi("outputs", "What should I create?", outputs, {0, 1, 2}, ch),
         _single("web", "Search the web for fresh examples if needed?", WEB_CHOICES, ch, labels=[False, True]),
+        _notes_step(ch),
         _confirm(
             lambda s: [
                 ("Topic", s["topic"]),
@@ -228,6 +250,7 @@ def lesson_wizard(store, ch):
                 ("Level", s["level"]),
                 ("Create", ", ".join(s["outputs"])),
                 ("Web search", "on" if s["web"] else "off"),
+                ("Your instructions", s.get("notes") or "none"),
             ],
             ch,
         ),
@@ -260,6 +283,7 @@ def exam_wizard(store, ch):
         _single("grade", "Grade?", GRADES, ch),
         _multi("qtypes", "Question types?", qtypes, {0, 1}, ch),
         _single("web", "Search the web for fresh examples if needed?", WEB_CHOICES, ch, labels=[False, True]),
+        _notes_step(ch),
         _confirm(
             lambda s: [
                 ("Topic", s["topic"]),
@@ -268,6 +292,7 @@ def exam_wizard(store, ch):
                 ("Grade", s["grade"]),
                 ("Questions", ", ".join(s["qtypes"])),
                 ("Web search", "on" if s["web"] else "off"),
+                ("Your instructions", s.get("notes") or "none"),
             ],
             ch,
         ),

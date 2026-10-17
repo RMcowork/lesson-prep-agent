@@ -280,7 +280,7 @@ class ToolRunner:
     def _t_ask_user(self, question, options=None):
         if options:
             kind, value = self.channel.choose(
-                question, [str(o) for o in options], other="Type my own answer"
+                question, [str(o) for o in options], other="Type my own answer", free_text=True
             )
             return value if kind == "other" else str(options[value])
         return self.channel.text(question).strip() or "(no answer)"
@@ -290,7 +290,15 @@ class ToolRunner:
         name = Path(filename).name
         if not name.lower().endswith(suffix):
             name += suffix
-        return self.out_dir / name
+        path = self.out_dir / name
+        if path.exists():  # keep the earlier version when a file is rewritten after the teacher's notes
+            backups = self.out_dir / "previous-versions"
+            backups.mkdir(exist_ok=True)
+            n = 1
+            while (backups / f"{path.stem}-v{n}{path.suffix}").exists():
+                n += 1
+            shutil.copy2(path, backups / f"{path.stem}-v{n}{path.suffix}")
+        return path
 
     def _t_create_docx(self, filename, title, blocks, rtl=False):
         path = self._out_path(filename, ".docx")

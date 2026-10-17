@@ -22,8 +22,10 @@ The first search/reindex downloads a multilingual embedding model (about 2 GB, o
 1. Put your course files (PDF, DOCX, PPTX, XLSX, TXT, MD) in `knowledge/`, optionally in topic subfolders.
 2. Start the menu: `.venv/bin/python -m agent`
 3. Pick from the numbered menus: lesson or exam, topic, length, language, grade, level, outputs and whether the agent may search the web. Enter `0` to go back.
-4. The agent's own questions (outline approval and so on) are numbered choices too, so you never have to type Arabic or Hebrew.
-5. Files are written to `output/<date>-<topic>/`; session logs go to `logs/`.
+4. The agent's own questions (outline approval and so on) are numbered choices too, so you never have to type Arabic or Hebrew. You can also add your own instructions in the menu ("Any special instructions?") and, on Telegram, simply type an answer instead of tapping a button.
+5. After the files arrive, choose **Request changes or reply to the agent** and write what you want in your own words ("shorter warm-up", "add 3 questions", "use football examples"). The agent applies your notes, rewrites the affected files and sends the updated ones. Repeat as often as you like. Earlier versions are kept in `previous-versions/` inside the output folder.
+6. Choose **Looks good, finish** when you are happy. Only then does the agent ask whether to save the files to the knowledge base, and it records your preferences and corrections in memory.
+7. Files are written to `output/<date>-<topic>/`; session logs go to `logs/`.
 
 Shortcuts without the menu: `python -m agent lesson "data types" 45 arabic`, `exam`, `chat`, `reindex`.
 

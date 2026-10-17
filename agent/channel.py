@@ -28,7 +28,7 @@ class TerminalChannel:
     def status(self, text=""):
         ui.show(text)
 
-    def choose(self, title, options, back=None, other=None, other_prompt="Type your answer:"):
+    def choose(self, title, options, back=None, other=None, other_prompt="Type your answer:", free_text=False):
         return menu.choose(title, options, self._ask, back=back, other=other, other_prompt=other_prompt)
 
     def choose_many(self, title, options, defaults, back="Back"):

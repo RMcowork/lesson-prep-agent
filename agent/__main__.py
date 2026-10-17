@@ -53,27 +53,67 @@ def slug(text: str) -> str:
     return re.sub(r"[^\w]+", "-", text.strip().lower(), flags=re.UNICODE).strip("-")[:40] or "session"
 
 
+FINAL_PHASE = (
+    "The teacher is satisfied with the files. Now finish up: ask the teacher with ask_user whether "
+    "to save the final files to the knowledge base (call add_to_knowledge if yes), then update memory "
+    "with write_memory: add the lesson to the lesson log, and save any preferences or corrections the "
+    "teacher asked for during this session. Then say a one-line goodbye."
+)
+
+
 def run_session(provider, cfg, task: str, name: str, ch, lock=None, allow_web: bool = True):
+    """One working session: generate, then keep taking the teacher's notes until they are happy."""
     folder = f"{date.today().isoformat()}-{slug(name)}"
     out_dir = DATA / "output" / folder
     out_dir.mkdir(parents=True, exist_ok=True)
     log_path = DATA / "logs" / f"{folder}.json"
-    if lock is not None:
-        if lock.locked():
-            ch.say("Another job is running. Yours will start when it finishes.")
-        lock.acquire()
-    try:
-        ch.say("Working on it. This can take a few minutes.")
-        run_agent(
-            provider, build_system(), task, ToolRunner(out_dir, ch, allow_web),
-            int(cfg.get("max_turns", 40)), log_path=log_path,
+    runner = ToolRunner(out_dir, ch, allow_web)
+    system, max_turns = build_system(), int(cfg.get("max_turns", 40))
+    state = {"messages": None}
+    delivered = {}
+
+    def turn(text):
+        if lock is not None:  # hold the lock only while the agent works, not while waiting for the teacher
+            if lock.locked():
+                ch.say("Another job is running. Yours will start when it finishes.")
+            lock.acquire()
+        try:
+            ch.say("Working on it. This can take a few minutes.")
+            state["messages"] = run_agent(
+                provider, system, text, runner, max_turns,
+                interactive=False, log_path=log_path, messages=state["messages"],
+            )
+        finally:
+            if lock is not None:
+                lock.release()
+
+    def deliver():
+        files = [p for p in sorted(out_dir.iterdir()) if p.is_file()]
+        changed = [p for p in files if delivered.get(p.name) != p.stat().st_mtime_ns]
+        for p in changed:
+            delivered[p.name] = p.stat().st_mtime_ns
+        if changed:
+            ch.send_files(changed)
+        else:
+            ch.say("No files were created or changed.")
+        return files
+
+    turn(task)
+    if isinstance(ch, TerminalChannel):
+        ch.say(f"Output folder: {out_dir}")
+    deliver()
+    while True:
+        kind, _ = ch.choose(
+            "What next?", ["Request changes or reply to the agent"], back="Looks good, finish"
         )
-    finally:
-        if lock is not None:
-            lock.release()
+        if kind == "back":
+            break
+        message = ch.text("Type your message to the agent:")
+        if message:
+            turn(message)
+            deliver()
+    turn(FINAL_PHASE)
     files = [p for p in sorted(out_dir.iterdir()) if p.is_file()]
-    ch.say(f"Output folder: {out_dir}" if isinstance(ch, TerminalChannel) else "Done.")
-    ch.send_files(files)
     if isinstance(ch, TerminalChannel):
         ch.say(f"Session log: {log_path}")
     offer_email(ch, files, name)

@@ -17,14 +17,16 @@ Both share the same `config/`, `knowledge/`, `memory/`, the RAG code (`rag/core.
 1. **Start:** read the memory index, the teacher profile and the course outline.
 2. **Intake:** the teacher picks topic, length, language, grade, level, outputs and whether web search is allowed from menus. The agent asks only for what is still missing.
 3. **Retrieve:** `search_knowledge` on the teacher's material; web search only for fresh examples or datasets.
-4. **Outline:** the agent shows an outline that lists its sources. The teacher approves, asks for changes, or cancels. No files are created before approval.
+4. **Outline:** the agent shows an outline that lists its sources. The teacher approves, picks "Change something" (the agent then asks what to change), types their own answer, or cancels. No files are created before approval.
 5. **Generate:** Word, Excel and PowerPoint files, right-to-left for Arabic and Hebrew.
 6. **Self-check:** timing matches the lesson length, the answer key matches the questions, the level fits the grade, RTL layout is correct, sources are cited.
-7. **Deliver:** files go to `output/<date>-<topic>/` (and to the Telegram chat, if used). The teacher is asked whether to email them.
-8. **Save and learn:** the agent offers to save the files to the knowledge base; memory is updated with the lesson and feedback.
+7. **Deliver:** files go to `output/<date>-<topic>/` (and to the Telegram chat, if used).
+8. **Revise:** the teacher can send notes in their own words at any time. The agent applies them exactly, rewrites only the affected files with the same names (the earlier version is copied to `previous-versions/`), and delivers the changed files again. This repeats until the teacher chooses "Looks good, finish".
+9. **Finish:** only then does the agent ask whether to save the final files to the knowledge base and update memory, including preferences and corrections the teacher gave during the session. Last, the teacher is asked whether to email the files.
 
 ## 4. Standalone architecture
-- **Loop (`agent/loop.py`):** calls the LLM, runs the tools it asks for, repeats until it finishes (max 40 steps, configurable). If the model replies with plain text and no tool call, a menu offers continue, type a reply, or finish. Every session is logged to `logs/` for debugging.
+- **Loop (`agent/loop.py`):** calls the LLM, runs the tools it asks for, repeats until it finishes (max 40 steps per turn, configurable). It can continue an earlier conversation, which is how revisions and the final step keep full context. Every session is logged to `logs/` for debugging.
+- **Session (`run_session` in `agent/__main__.py`):** generate, deliver changed files, then loop on "Request changes or reply to the agent" / "Looks good, finish"; then the final phase (save to knowledge base, memory) and the email offer. Any plain-text reply or question from the agent is answered through the same "What next?" step, so no message from the teacher is dropped. The job lock is held only while the agent works, not while it waits for the teacher.
 - **Switchable LLM (`agent/llm.py`, `config/agent.toml`):** `anthropic` (Claude API, default `claude-sonnet-5-5`) or `openai` (any OpenAI-compatible endpoint, including local models through Ollama). One neutral message format; each provider converts it.
 - **Tools (`agent/tools.py`):**
 
@@ -48,6 +50,11 @@ The terminal cannot display or accept right-to-left text reliably, so the agent 
 - Arabic and Hebrew lines are reordered and right-aligned for display, and brackets are shown as dashes. Set `AGENT_TERMINAL_BIDI=native` if the terminal handles RTL itself.
 - Free chat is the only place where text must be typed in the terminal.
 - Shortcuts without the menu: `lesson`, `exam`, `chat`, `reindex`.
+
+## 5a. Giving instructions
+- **Before starting:** the wizard has an optional "Any special instructions?" step; the text is passed to the agent as instructions to follow exactly.
+- **During questions:** every agent question offers "Type my own answer"; on Telegram the teacher can type an answer directly instead of tapping a button.
+- **After delivery:** free-text change requests, as described in the workflow. The system prompt tells the agent to treat notes as instructions, change only what they affect, list what it changed, and ask one short question if a note is unclear.
 
 ## 5b. Topics and web-search choice
 - **Topic list (`agent/topics.py`):** the units in `config/course-outline.md` (with their learning objectives) plus the teacher's own topics, saved in `topics.json` in the data folder (private, git-ignored).
@@ -149,6 +156,7 @@ A new teacher gets the repository plus their own `config/teacher-profile.md` and
 - An approved lesson saved to the knowledge base is found, labeled generated, on a later request about the same subject.
 - Adding a new topic with an outline and saving it makes it appear in the topic list in the next session; removing it makes it disappear.
 - With web search off, the model is not offered the web tools; with it on, it is.
+- After the files arrive, a note such as "shorter warm-up" makes the agent rewrite the file accordingly, deliver the new version, and keep the old one in `previous-versions/`; the note is also recorded in memory at the end.
 - `lesson` for "data types", 45 minutes, Arabic produces files with correct content, RTL layout, timing and answer key.
 - Feedback such as "shorter warm-ups" given in one session shows up in the next lesson.
 - Replacing `config/` and `knowledge/` changes the outputs without any other edit.
