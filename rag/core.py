@@ -2,6 +2,7 @@
 
 Used by both the MCP server (rag/server.py) and the standalone agent.
 """
+import gc
 import hashlib
 import json
 import os
@@ -15,6 +16,9 @@ MANIFEST = INDEX_DIR / "manifest.json"
 MODEL_NAME = "intfloat/multilingual-e5-large"
 CHUNK_WORDS = 250
 OVERLAP_WORDS = 40
+# CPU threads for embedding. Default: half the cores (at least 2) so the machine stays usable.
+THREADS = int(os.environ.get("RAG_THREADS") or max(2, (os.cpu_count() or 4) // 2))
+BATCH_SIZE = 16  # small batches keep memory bounded with the large model
 SUPPORTED = {".pdf", ".docx", ".pptx", ".xlsx", ".txt", ".md", ".csv"}
 
 _model = None
@@ -27,7 +31,7 @@ def _get_model():
         from fastembed import TextEmbedding
 
         _model = TextEmbedding(
-            model_name=MODEL_NAME, cache_dir=str(INDEX_DIR / "models")
+            model_name=MODEL_NAME, cache_dir=str(INDEX_DIR / "models"), threads=THREADS
         )
     return _model
 
@@ -45,9 +49,19 @@ def _get_collection():
     return _collection
 
 
+def release_model():
+    """Free the embedding model's memory (a long-running bot keeps it otherwise)."""
+    global _model
+    _model = None
+    gc.collect()
+
+
 def _embed(texts, prefix):
     # e5 models expect "query: " / "passage: " prefixes; fastembed returns normalized vectors
-    return [v.tolist() for v in _get_model().embed([f"{prefix}: {t}" for t in texts])]
+    return [
+        v.tolist()
+        for v in _get_model().embed([f"{prefix}: {t}" for t in texts], batch_size=BATCH_SIZE)
+    ]
 
 
 def extract(path: Path):
@@ -130,6 +144,7 @@ def reindex() -> str:
     }
     added = updated = removed = 0
     errors = []
+    no_text = []
 
     for rel in list(manifest):
         if rel not in files:
@@ -139,8 +154,8 @@ def reindex() -> str:
 
     for rel, path in files.items():
         digest = _file_hash(path)
-        if manifest.get(rel) == digest:
-            continue
+        if manifest.get(rel) == digest and col.get(where={"file": rel}, limit=1)["ids"]:
+            continue  # unchanged and already searchable
         try:
             col.delete(where={"file": rel})
             ids, docs, metas = [], [], []
@@ -153,13 +168,16 @@ def reindex() -> str:
                     metas.append(
                         {"file": rel, "location": location, "topic": topic, "source": source}
                     )
-            if docs:
-                col.add(
-                    ids=ids,
-                    documents=docs,
-                    metadatas=metas,
-                    embeddings=_embed(docs, "passage"),
-                )
+            if not docs:
+                # Not recorded in the manifest, so it is retried (and reported) on every reindex.
+                no_text.append(rel)
+                continue
+            col.add(
+                ids=ids,
+                documents=docs,
+                metadatas=metas,
+                embeddings=_embed(docs, "passage"),
+            )
             updated += 1 if rel in manifest else 0
             added += 0 if rel in manifest else 1
             manifest[rel] = digest
@@ -167,7 +185,13 @@ def reindex() -> str:
             errors.append(f"{rel}: {exc}")
 
     MANIFEST.write_text(json.dumps(manifest, indent=2))
+    release_model()
     msg = f"added {added}, updated {updated}, removed {removed}; {col.count()} chunks total"
+    if no_text:
+        msg += (
+            "\nWARNING: no readable text found in these files, so they are NOT searchable "
+            "(scanned or image-only? they need OCR or a text version):\n  " + "\n  ".join(no_text)
+        )
     if errors:
         msg += "\nerrors:\n" + "\n".join(errors)
     return msg

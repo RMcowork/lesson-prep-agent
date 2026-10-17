@@ -1,6 +1,6 @@
 # Lesson-Prep Agent
 
-An AI agent that prepares lesson plans, worksheets, quizzes/exams (with answer keys and rubrics) and slides for a K10–K11 data-analysis course in Arabic, Hebrew and English. It uses your own course material (RAG), web search, and file-based memory. Design: see [SPEC.md](SPEC.md).
+An AI agent that prepares lesson plans, worksheets, quizzes/exams (with answer keys and rubrics) and slides for a K10–K11 data-analysis course in Arabic, Hebrew and English. It uses your own course material (RAG), web search, and file-based memory. Design: see [SPEC.md](SPEC.md) for what is built, and [Architecture.md](Architecture.md) for the full system design (triggers, data flow, database, dashboard, deployment).
 
 It works in two ways:
 - **Standalone program** (`python -m agent ...`): runs on its own, calls an LLM API you choose.
@@ -63,12 +63,21 @@ If `SMTP_USER` and `SMTP_PASSWORD` are empty, the email question is skipped. Fil
 ## Generated knowledge
 When a lesson is finished, the agent asks whether to save the files to the knowledge base. If you say yes, they are copied to `knowledge/generated/` and indexed, and later requests on the same subject can find and reuse them. Results are labeled as generated, so they are not mistaken for your original material.
 
-## Deploying later
-Set `AGENT_DATA_DIR` to a persistent folder (for example a mounted volume). A `Dockerfile` is included (untested):
+## Scanned PDFs
+Files that contain only page images (scans) have no text to search. After indexing, the agent lists any such files in a WARNING. Replace them with a text version, or run OCR on them first (for example with `ocrmypdf`), then index again.
+
+## Docker (deploying later)
+The image runs the agent anywhere. It holds only code: your `.env`, knowledge files, memory, topics, logs and index are excluded by `.dockerignore`, so you supply them at run time. It runs as a non-root user, and everything private lives in a volume mounted at `/data` (`AGENT_DATA_DIR`).
 ```bash
 docker build -t lesson-prep-agent .
-docker run -it --env-file .env -v agent-data:/data lesson-prep-agent lesson "data types" 45 english
+# Menu (interactive):
+docker run -it --env-file .env -v agent-data:/data lesson-prep-agent
+# Telegram bot (keeps running):
+docker run -d --restart unless-stopped --env-file .env -v agent-data:/data lesson-prep-agent telegram
+# Index files you put in the volume's knowledge/ folder:
+docker run --rm -v agent-data:/data lesson-prep-agent reindex
 ```
+Indexing uses half of the CPU cores by default (set `RAG_THREADS` to change it) and frees the model's memory afterwards; `docker run --cpus=4` also caps the container. The image is about 1 GB. The first index or search downloads the embedding model (about 2 GB) into the volume, once. Pass `--env-file .env` only when you run the container; never copy `.env` into an image.
 
 ## Customize for another teacher
 Edit `config/teacher-profile.md`, `config/course-outline.md` (and optionally `config/system-prompt.md`), replace the files in `knowledge/`, and start with an empty `memory/` (only `memory/INDEX.md` is tracked; memory files are created on demand). No code changes needed.
