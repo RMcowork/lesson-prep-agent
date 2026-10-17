@@ -15,15 +15,18 @@ Both share the same `config/`, `knowledge/`, `memory/`, the RAG code (`rag/core.
 
 ## 3. Workflow (both modes)
 1. **Start:** read the memory index, the teacher profile and the course outline.
-2. **Intake:** the teacher picks topic, length, language, grade, level and outputs from menus. The agent asks only for what is still missing.
+2. **Intake:** the teacher picks topic, length, language, grade, level, outputs and whether web search is allowed from menus. The agent asks only for what is still missing.
 3. **Retrieve:** `search_knowledge` on the teacher's material; web search only for fresh examples or datasets.
-4. **Outline:** the agent shows an outline that lists its sources. The teacher approves, asks for changes, or cancels. No files are created before approval.
+4. **Outline:** the agent shows an outline that lists its sources. The teacher approves, picks "Change something" (the agent then asks what to change), types their own answer, or cancels. No files are created before approval.
 5. **Generate:** Word, Excel and PowerPoint files, right-to-left for Arabic and Hebrew.
 6. **Self-check:** timing matches the lesson length, the answer key matches the questions, the level fits the grade, RTL layout is correct, sources are cited.
-7. **Save and learn:** files go to `output/<date>-<topic>/`; the agent offers to save them to the knowledge base; memory is updated with the lesson and feedback.
+7. **Deliver:** files go to `output/<date>-<topic>/` (and to the Telegram chat, if used).
+8. **Revise:** the teacher can send notes in their own words at any time. The agent applies them exactly, rewrites only the affected files with the same names (the earlier version is copied to `previous-versions/`), and delivers the changed files again. This repeats until the teacher chooses "Looks good, finish".
+9. **Finish:** only then does the agent ask whether to save the final files to the knowledge base and update memory, including preferences and corrections the teacher gave during the session. Last, the teacher is asked whether to email the files.
 
 ## 4. Standalone architecture
-- **Loop (`agent/loop.py`):** calls the LLM, runs the tools it asks for, repeats until it finishes (max 40 steps, configurable). If the model replies with plain text and no tool call, a menu offers continue, type a reply, or finish. Every session is logged to `logs/` for debugging.
+- **Loop (`agent/loop.py`):** calls the LLM, runs the tools it asks for, repeats until it finishes (max 40 steps per turn, configurable). It can continue an earlier conversation, which is how revisions and the final step keep full context. Every session is logged to `logs/` for debugging.
+- **Session (`run_session` in `agent/__main__.py`):** generate, deliver changed files, then loop on "Request changes or reply to the agent" / "Looks good, finish"; then the final phase (save to knowledge base, memory) and the email offer. Any plain-text reply or question from the agent is answered through the same "What next?" step, so no message from the teacher is dropped. The job lock is held only while the agent works, not while it waits for the teacher.
 - **Switchable LLM (`agent/llm.py`, `config/agent.toml`):** `anthropic` (Claude API, default `claude-sonnet-5-5`) or `openai` (any OpenAI-compatible endpoint, including local models through Ollama). One neutral message format; each provider converts it.
 - **Tools (`agent/tools.py`):**
 
@@ -48,13 +51,30 @@ The terminal cannot display or accept right-to-left text reliably, so the agent 
 - Free chat is the only place where text must be typed in the terminal.
 - Shortcuts without the menu: `lesson`, `exam`, `chat`, `reindex`.
 
+## 5a. Giving instructions
+- **Before starting:** the wizard has an optional "Any special instructions?" step; the text is passed to the agent as instructions to follow exactly.
+- **During questions:** every agent question offers "Type my own answer"; on Telegram the teacher can type an answer directly instead of tapping a button.
+- **After delivery:** free-text change requests, as described in the workflow. The system prompt tells the agent to treat notes as instructions, change only what they affect, list what it changed, and ask one short question if a note is unclear.
+
+## 5b. Topics and web-search choice
+- **Topic list (`agent/topics.py`):** the units in `config/course-outline.md` (with their learning objectives) plus the teacher's own topics, saved in `topics.json` in the data folder (private, git-ignored).
+- **Adding topics:** the topic menu has "Add a new topic" (name plus an optional one-line outline) and then asks whether to save it for next time. "Manage my topics" in the main menu adds, removes and lists own topics. The outline is passed to the agent as the teacher's own instructions for the topic. Custom topics cannot duplicate an existing name.
+- **Web search choice:** every lesson, exam and free-chat request asks whether the agent may search the web (default: no). When it is off, `web_search` and `fetch_url` are not offered to the model and the runner refuses them if called. When it is on, the prompt limits use to examples the knowledge base lacks.
+- **Search reliability:** `web_search` tries DuckDuckGo directly, then the library's automatic multi-engine mode, with a worst case of about 30 seconds; Arabic and Hebrew queries fail intermittently. On failure the model is told to continue without web results.
+
 ## 6. Telegram trigger
 - **Mechanism (`agent/telegram_bot.py`):** long polling with `getUpdates`, so no server or public address is needed. `python -m agent telegram` starts it.
 - **Interface:** menus become inline buttons; the outputs multi-select uses toggle buttons with Done and Back; typing Arabic/Hebrew works natively; finished files are sent back as documents.
 - **Access control:** only chat ids in `TELEGRAM_ALLOWED_IDS` can use the bot. Others get a refusal that shows only their own chat id. The token is read from `.env` and is removed from all error messages.
 - **Sessions:** one session per chat in its own thread; a global lock runs one agent job at a time and tells waiting users. `/cancel` ends a session; 30 minutes of silence also ends it.
 - **Testing status:** verified against a simulated Telegram server and a stand-in model, and the real token connects to the Bot API. A real end-to-end chat has not been confirmed yet: the first `/start` received no reply, and the cause was still being investigated when this was written.
-- **Not yet built:** receiving documents from Telegram into `knowledge/`, and an email channel. Both fit the channel interface.
+- **Not yet built:** receiving documents from Telegram into `knowledge/`, and email as an input channel (sending files by email is built, see 6b). Both fit the channel interface.
+
+## 6b. Email delivery
+- **Module (`agent/emailer.py`):** sends the generated files as attachments over SMTP (SSL on port 465, otherwise STARTTLS). Settings come from `.env`: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` (a Gmail app password), optional `EMAIL_FROM` and `EMAIL_TO`.
+- **Approval:** after each session the code (not the model) asks "Email these files?" with the saved addresses, "Send to another address" and "No, thanks". Nothing is sent without a yes. The model has no email tool, so text inside knowledge files or web pages cannot make it send anything.
+- **Safety:** the typed address is validated; login errors are reported without the password; about 20 MB of attachments at most, with larger files skipped and reported. If `SMTP_USER` or `SMTP_PASSWORD` is missing, the question is skipped.
+- **Testing status:** verified with a fake SMTP server (default and typed recipient, decline, invalid address, login failure, no password leak); not yet verified against a real mail server.
 
 ## 7. RAG design
 - **Input:** PDF, DOCX, PPTX, XLSX, TXT, MD and CSV files in `knowledge/`, optionally in topic subfolders.
@@ -97,6 +117,8 @@ AI-AGENT/
     loop.py  llm.py  tools.py        agent loop, LLM providers, tools
     docs.py                          Word/Excel/PowerPoint generators
     menu.py  ui.py  channel.py       menus, RTL display, channel interface
+    emailer.py                       email the generated files (SMTP)
+    topics.py                        course units plus the teacher's own topics
     telegram_bot.py                  Telegram client, channel, bot
   rag/
     core.py                          indexing and search (shared)
@@ -118,10 +140,10 @@ A new teacher gets the repository plus their own `config/teacher-profile.md` and
 
 ## 12. Safety and privacy
 - Student data is never stored; only generic teaching material is produced.
-- `.env`, `knowledge/`, `memory/` (except the index), `output/`, `logs/` and `rag-index/` are git-ignored, so private material and keys are not pushed to GitHub.
+- `.env`, `knowledge/`, `memory/` (except the index), `output/`, `logs/`, `topics.json` and `rag-index/` are git-ignored, so private material and keys are not pushed to GitHub.
 - The Telegram bot is allowlist-only because every request spends API credit.
 - `fetch_url` refuses private and local addresses; memory and output tools only touch their own folders.
-- The agent never sends email or posts anything without explicit approval, and never commits or pushes without the user's approval.
+- Email is sent only after the teacher approves each send and picks the recipient; the model has no email tool. The agent never posts anything or commits and pushes without the user's approval.
 
 ## 13. Deployment
 - **Now:** runs locally on the teacher's computer; the Telegram bot works only while `python -m agent telegram` is running.
@@ -132,6 +154,9 @@ A new teacher gets the repository plus their own `config/teacher-profile.md` and
 - A known document in `knowledge/` is cited in a lesson on its topic; a topic with no material gets a "nothing found" answer.
 - Arabic and Hebrew queries retrieve relevant English chunks.
 - An approved lesson saved to the knowledge base is found, labeled generated, on a later request about the same subject.
+- Adding a new topic with an outline and saving it makes it appear in the topic list in the next session; removing it makes it disappear.
+- With web search off, the model is not offered the web tools; with it on, it is.
+- After the files arrive, a note such as "shorter warm-up" makes the agent rewrite the file accordingly, deliver the new version, and keep the old one in `previous-versions/`; the note is also recorded in memory at the end.
 - `lesson` for "data types", 45 minutes, Arabic produces files with correct content, RTL layout, timing and answer key.
 - Feedback such as "shorter warm-ups" given in one session shows up in the next lesson.
 - Replacing `config/` and `knowledge/` changes the outputs without any other edit.
@@ -141,5 +166,6 @@ A new teacher gets the repository plus their own `config/teacher-profile.md` and
 - Confirm the Telegram bot end to end with the real Telegram API.
 - Build and test the Docker image.
 - Receive course files through Telegram into `knowledge/`.
-- Email channel.
+- Email as an input channel (triggering lessons by email).
+- Confirm email delivery with a real mail server.
 - Optional: Google Drive sync of outputs, scheduled weekly lesson prep, Canva slides.

@@ -28,14 +28,14 @@ class TerminalChannel:
     def status(self, text=""):
         ui.show(text)
 
-    def choose(self, title, options, back=None, other=None):
-        return menu.choose(title, options, self._ask, back=back, other=other)
+    def choose(self, title, options, back=None, other=None, other_prompt="Type your answer:", free_text=False):
+        return menu.choose(title, options, self._ask, back=back, other=other, other_prompt=other_prompt)
 
     def choose_many(self, title, options, defaults, back="Back"):
         return menu.choose_many(title, options, defaults, self._ask, back=back)
 
     def text(self, prompt):
-        return self._ask(prompt).strip()
+        return self._ask(prompt.rstrip() + " ").strip()
 
     def send_files(self, paths):
         names = ", ".join(Path(p).name for p in paths)

@@ -113,7 +113,7 @@ class TelegramChannel:
         except RuntimeError:
             pass
 
-    def choose(self, title, options, back=None, other=None):
+    def choose(self, title, options, back=None, other=None, other_prompt="Type your answer:", free_text=False):
         token = uuid.uuid4().hex[:6]
         rows = [[{"text": _label(o), "callback_data": f"{token}:o{i}"}] for i, o in enumerate(options)]
         if other:
@@ -136,12 +136,16 @@ class TelegramChannel:
                     return "back", None
                 if action == "x":
                     self._finish_prompt(sent["message_id"], title, other)
-                    return "other", self.text("Type your answer:")
+                    return "other", self.text(other_prompt)
                 index = int(action[1:])
                 self._finish_prompt(sent["message_id"], title, options[index])
                 return "option", index
             if item["type"] == "callback":
                 self._answer(item)  # stale button from an earlier question
+            elif free_text and item["text"].strip() and not item["text"].startswith("/"):
+                # the teacher typed an answer instead of tapping a button
+                self._finish_prompt(sent["message_id"], title, item["text"].strip())
+                return "other", item["text"].strip()
             else:
                 self.say("Please tap one of the buttons above (or send /cancel).")
 

@@ -21,9 +21,11 @@ The first search/reindex downloads a multilingual embedding model (about 2 GB, o
 ## Use (standalone)
 1. Put your course files (PDF, DOCX, PPTX, XLSX, TXT, MD) in `knowledge/`, optionally in topic subfolders.
 2. Start the menu: `.venv/bin/python -m agent`
-3. Pick from the numbered menus: lesson or exam, unit, length, language, grade, level and outputs. Enter `0` to go back.
-4. The agent's own questions (outline approval and so on) are numbered choices too, so you never have to type Arabic or Hebrew.
-5. Files are written to `output/<date>-<topic>/`; session logs go to `logs/`.
+3. Pick from the numbered menus: lesson or exam, topic, length, language, grade, level, outputs and whether the agent may search the web. Enter `0` to go back.
+4. The agent's own questions (outline approval and so on) are numbered choices too, so you never have to type Arabic or Hebrew. You can also add your own instructions in the menu ("Any special instructions?") and, on Telegram, simply type an answer instead of tapping a button.
+5. After the files arrive, choose **Request changes or reply to the agent** and write what you want in your own words ("shorter warm-up", "add 3 questions", "use football examples"). The agent applies your notes, rewrites the affected files and sends the updated ones. Repeat as often as you like. Earlier versions are kept in `previous-versions/` inside the output folder.
+6. Choose **Looks good, finish** when you are happy. Only then does the agent ask whether to save the files to the knowledge base, and it records your preferences and corrections in memory.
+7. Files are written to `output/<date>-<topic>/`; session logs go to `logs/`.
 
 Shortcuts without the menu: `python -m agent lesson "data types" 45 arabic`, `exam`, `chat`, `reindex`.
 
@@ -38,6 +40,25 @@ Run the agent as a Telegram bot on your own computer (no server or public addres
 5. Send `/start` again. You get the same menus as buttons, you can type Arabic or Hebrew freely, and finished files arrive as documents in the chat.
 
 Only chat ids in `TELEGRAM_ALLOWED_IDS` can use the bot, because every request spends API credit. `/cancel` stops the current conversation. One job runs at a time; others wait. The bot works only while the program is running on your computer.
+
+## Your own topics
+- In the topic menu choose **Add a new topic**, type its name and (optionally) a short outline. The agent builds the lesson on that outline.
+- You are asked whether to save it. If you say yes, it appears in the topic list next time, marked as yours.
+- **Manage my topics** (main menu) lets you add, remove and list your own topics. They are stored in `topics.json` in your data folder, which is private and not committed. The units in `config/course-outline.md` are always listed too, and their learning objectives are given to the agent.
+- Tip: type long outlines on Telegram; the terminal takes one line.
+
+## Web search
+Each lesson or exam asks "Search the web for fresh examples if needed?" (default: no, use my files only). If you answer no, the web tools are removed for that session, so the agent cannot search at all. If you answer yes, it searches only for examples your files lack. Search uses the free DuckDuckGo service and can be unreliable for Arabic and Hebrew; the agent continues without results if it fails.
+
+## Email the files
+When a lesson or exam is finished, the agent asks "Email these files?" (in the terminal and on Telegram). Nothing is sent unless you say yes, and you choose the recipient: one of your saved addresses or one you type. The model itself has no email tool.
+
+Setup in `.env` (see `.env.example`):
+1. For Gmail, turn on 2-step verification, then create an **App Password** at https://myaccount.google.com/apppasswords. Use it as `SMTP_PASSWORD` (never your normal password).
+2. Set `SMTP_USER` to your address, and optionally `EMAIL_TO` to the address(es) you want offered in the menu.
+3. Other providers: set `SMTP_HOST` and `SMTP_PORT` (465 uses SSL; other ports use STARTTLS).
+
+If `SMTP_USER` and `SMTP_PASSWORD` are empty, the email question is skipped. Files are attached up to about 20 MB in total.
 
 ## Generated knowledge
 When a lesson is finished, the agent asks whether to save the files to the knowledge base. If you say yes, they are copied to `knowledge/generated/` and indexed, and later requests on the same subject can find and reuse them. Results are labeled as generated, so they are not mistaken for your original material.
