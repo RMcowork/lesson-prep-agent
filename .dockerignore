@@ -1,10 +1,18 @@
+# Never bake private data, keys or local state into the image
 .venv/
 .git/
+.claude/
 .env
+.env.*
+!.env.example
 knowledge/*
 output/*
+logs/
 memory/*
 !memory/INDEX.md
+topics.json
 rag/index/
 rag-index/
 __pycache__/
+*.pyc
+.DS_Store

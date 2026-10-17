@@ -82,6 +82,8 @@ The terminal cannot display or accept right-to-left text reliably, so the agent 
 - **Embeddings:** `intfloat/multilingual-e5-large` through fastembed/ONNX, so Arabic, Hebrew and English queries match each other. It is local; no data leaves the machine. (fastembed is used because `torch` has no wheel for Intel Macs on Python 3.13.)
 - **Source tags:** every chunk is tagged `teacher` or `generated` (anything under `knowledge/generated/`). Search can filter by source, and generated results are labeled so they are never treated as the teacher's original material or as verified facts.
 - **Generated knowledge:** when the teacher agrees at the end of a lesson, `add_to_knowledge` copies the approved files to `knowledge/generated/<date-topic>/` and re-indexes, so a later request on the same subject finds them.
+- **Resource use:** embedding uses half the CPU cores by default (`RAG_THREADS` overrides), batches of 16 chunks, and the model is released after indexing (about 400% CPU and 1.8 GB peak on an 8-core machine, versus 900% and 4.6 GB before).
+- **Files without text:** a file that yields no text (for example a scanned PDF) is not recorded as indexed. Every reindex reports it in a WARNING and retries it, so it can never look searchable when it is not. OCR is not built in.
 - **Rules:** knowledge base first, web second; cite file names; if nothing relevant is found, say so and never invent course facts.
 - **Claude Code mode:** `rag/server.py` is a thin MCP wrapper around `rag/core.py` exposing `search_knowledge` and `reindex`.
 
@@ -147,7 +149,8 @@ A new teacher gets the repository plus their own `config/teacher-profile.md` and
 
 ## 13. Deployment
 - **Now:** runs locally on the teacher's computer; the Telegram bot works only while `python -m agent telegram` is running.
-- **Later:** the `Dockerfile` runs the agent anywhere with a volume at `/data` and keys passed at run time. It has not been built or tested yet. An always-on host such as an Oracle Cloud Always Free VM fits the Telegram bot.
+- **Container:** the `Dockerfile` builds a ~1 GB image that runs as a non-root user with a volume at `/data` and keys passed at run time. The default command opens the menu; `telegram` runs the bot. `.dockerignore` keeps `.env`, `knowledge/`, `memory/`, `output/`, `logs/`, `topics.json` and the index out of the image. Tested on Docker Desktop: build, help, menu, no private data in the image, data persisting across containers through the volume, and indexing plus Arabic/English search inside the container. Not tested inside the container: a lesson with a real LLM key, the Telegram bot, and email.
+- **Later:** an always-on host such as an Oracle Cloud Always Free VM fits the Telegram bot.
 - **Storage:** local ChromaDB and files stay for now. Supabase (Postgres with pgvector, Storage, login for teachers) is the planned step for a hosted or sold version; only `rag/core.py` would change.
 
 ## 14. Acceptance tests
@@ -164,7 +167,7 @@ A new teacher gets the repository plus their own `config/teacher-profile.md` and
 
 ## 15. Open items
 - Confirm the Telegram bot end to end with the real Telegram API.
-- Build and test the Docker image.
+- Run a full lesson, the Telegram bot and email from inside the container.
 - Receive course files through Telegram into `knowledge/`.
 - Email as an input channel (triggering lessons by email).
 - Confirm email delivery with a real mail server.
