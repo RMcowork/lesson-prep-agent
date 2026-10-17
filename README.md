@@ -1,6 +1,6 @@
 # Lesson-Prep Agent
 
-An AI agent that prepares lesson plans, worksheets, quizzes/exams (with answer keys and rubrics) and slides for a K10–K11 data-analysis course in Arabic, Hebrew and English. It uses your own course material (RAG), web search, and file-based memory. Design: see [SPEC.md](SPEC.md).
+An AI agent that prepares lesson plans, worksheets, quizzes/exams (with answer keys and rubrics) and slides for a K10–K11 data-analysis course in Arabic, Hebrew and English. It uses your own course material (RAG), web search, and file-based memory. Design: see [SPEC.md](SPEC.md) for what is built, and [Architecture.md](Architecture.md) for the full system design (triggers, data flow, database, dashboard, deployment).
 
 It works in two ways:
 - **Standalone program** (`python -m agent ...`): runs on its own, calls an LLM API you choose.
