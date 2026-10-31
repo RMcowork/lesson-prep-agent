@@ -15,6 +15,15 @@ PATTERNS = {
 }
 COMBINED = re.compile("|".join(f"(?:{p})" for p in PATTERNS.values()))
 
+# A fake value that exists only to prove the scanner works. Exact match only, so a real secret can never hide behind it.
+# It is built at run time so the file holds no literal; one commit in history (1f51ab4) still holds the literal.
+KNOWN_FAKES = {"SMTP_PASSWORD=" + "abcdefghijklmnop"}
+
+
+def real_hits(text):
+    """Everything that looks like a secret, except the known fake."""
+    return [m.group(0) for m in COMBINED.finditer(text) if m.group(0) not in KNOWN_FAKES]
+
 
 def git(*args):
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, errors="replace")
@@ -25,23 +34,32 @@ def in_git_repo():
 
 
 def test_the_scanner_itself_catches_each_kind_of_secret():
-    fakes = ["sk-ant-api03-" + "a" * 40, "sk-" + "A1" * 20, "123456789:" + "x" * 35, "SMTP_PASSWORD=abcdefghijklmnop"]
+    fakes = ["sk-ant-api03-" + "a" * 40, "sk-" + "A1" * 20, "123456789:" + "x" * 35, "SMTP_PASSWORD=" + "abcdefghijklmnop"]
     assert all(COMBINED.search(f) for f in fakes)
     assert not COMBINED.search("ANTHROPIC_API_KEY=") and not COMBINED.search("TELEGRAM_BOT_TOKEN=\n")   # .env.example style
     assert not COMBINED.search("OPENAI_API_KEY=\n TELEGRAM_BOT_TOKEN=\n")     # a name on the next line is not a value
 
 
+def test_the_known_fake_is_allowed_only_when_it_matches_exactly():
+    fake = next(iter(KNOWN_FAKES))
+    assert real_hits(fake) == [] and real_hits(f"x {fake}\n") == []
+    assert real_hits(fake + "q") and real_hits(fake.replace("abc", "abd"))          # any other value is still caught
+    assert real_hits("SMTP_PASSWORD=" + "z" * 16) and real_hits("sk-ant-api03-" + "a" * 40)
+
+
 @pytest.mark.skipif(not in_git_repo(), reason="not a git checkout")
-def test_no_secret_in_any_tracked_file():
+def test_no_secret_in_any_file_tracked_or_not_yet_added():
+    """Includes new files that are not committed yet, so a secret cannot slip through before its first commit."""
     hits = []
-    for name in git("ls-files").stdout.splitlines():
+    names = git("ls-files", "--cached", "--others", "--exclude-standard").stdout.splitlines()
+    for name in names:
         path = ROOT / name
         if path.is_file() and path.stat().st_size < 2_000_000:
             try:
                 text = path.read_text(encoding="utf-8")
             except UnicodeDecodeError:
                 continue
-            hits += [f"{name}: {m.group(0)[:12]}..." for m in COMBINED.finditer(text)]
+            hits += [f"{name}: {m[:12]}..." for m in real_hits(text)]
     assert not hits, f"secrets in tracked files: {hits}"
 
 
@@ -49,7 +67,7 @@ def test_no_secret_in_any_tracked_file():
 def test_no_secret_in_any_commit():
     history = git("log", "--all", "-p", "--no-color", "--format=commit %h")
     assert history.returncode == 0
-    hits = sorted({m.group(0)[:12] + "..." for m in COMBINED.finditer(history.stdout)})
+    hits = sorted({m[:12] + "..." for m in real_hits(history.stdout)})
     assert not hits, f"secrets in git history: {hits}"
 
 

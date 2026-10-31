@@ -52,7 +52,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install pytest
+      - run: pip install pytest pytest-timeout
       - name: Look for sk-ant, bot tokens and passwords in files and history
         run: pytest tests/test_secrets.py -q
 
