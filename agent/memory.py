@@ -19,6 +19,12 @@ FILES = {
     "class-notes.md": "# Class notes\n\n",
     "lesson-log.md": "# Lesson log\n\n| Date | Topic | Language | Files | Feedback |\n|---|---|---|---|---|\n",
 }
+INDEX = (
+    "# Memory index\n\n"
+    "- [Teacher preferences](teacher-preferences.md): default language, tone, formats, timing habits\n"
+    "- [Class notes](class-notes.md): level mix, what worked and what didn't (no student names)\n"
+    "- [Lesson log](lesson-log.md): date, topic, files produced, feedback\n"
+)
 PLACEHOLDER = "(Empty"          # an old template line such as "(Empty. The agent adds preferences here...)"
 
 
@@ -39,6 +45,24 @@ def atomic_write(path: Path, text: str) -> None:
         os.replace(tmp, path)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def ensure_files() -> None:
+    """Create any missing memory file and the index, so a fresh data folder works from the first run.
+    Existing files are never touched."""
+    for name, header in {**FILES, "INDEX.md": INDEX}.items():
+        path = MEMORY_DIR / name
+        if not path.exists():
+            atomic_write(path, header)
+
+
+def index() -> str:
+    """The memory index for the model. If the folder cannot be written (read-only volume) the agent still starts."""
+    try:
+        ensure_files()
+        return (MEMORY_DIR / "INDEX.md").read_text(encoding="utf-8")
+    except OSError:
+        return INDEX                                  # the same text, just not saved to disk
 
 
 def read(name: str) -> str:

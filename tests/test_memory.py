@@ -122,3 +122,47 @@ def test_the_model_is_never_offered_a_way_to_rewrite():
 
 def test_reading_a_file_that_does_not_exist_yet_says_empty():
     assert memory.read("lesson-log.md") == "(empty)"
+
+
+# --- ticket #33: a fresh data folder works from the first run ----------------------------------------
+def test_a_fresh_folder_gets_the_three_files_and_the_index(memory_dir):
+    memory.ensure_files()
+    assert sorted(p.name for p in memory_dir.iterdir()) == ["INDEX.md", "class-notes.md", "lesson-log.md", "teacher-preferences.md"]
+    index = (memory_dir / "INDEX.md").read_text()
+    assert all(name in index for name in ("teacher-preferences.md", "class-notes.md", "lesson-log.md"))
+    assert (memory_dir / "lesson-log.md").read_text().startswith("# Lesson log") and "| Date |" in (memory_dir / "lesson-log.md").read_text()
+
+
+def test_existing_files_are_never_overwritten_by_ensure(memory_dir):
+    memory_dir.mkdir()
+    (memory_dir / "class-notes.md").write_text("# Class notes\n\n- my real notes\n")
+    (memory_dir / "INDEX.md").write_text("# My own index\n")
+    memory.ensure_files()
+    memory.ensure_files()
+    assert (memory_dir / "class-notes.md").read_text() == "# Class notes\n\n- my real notes\n"
+    assert (memory_dir / "INDEX.md").read_text() == "# My own index\n"
+
+
+def test_an_unwritable_memory_folder_does_not_stop_the_agent(tmp_path, monkeypatch):
+    blocker = tmp_path / "a-file"
+    blocker.write_text("x")
+    monkeypatch.setattr(memory, "MEMORY_DIR", blocker / "memory")           # cannot be created under a file
+    assert "teacher-preferences.md" in memory.index()
+
+
+def test_the_model_is_told_memory_exists_even_on_a_brand_new_deployment(data_dir):
+    """Before: an empty data folder gave the model '(none)'."""
+    import agent.__main__ as app
+
+    system = app.build_system()
+    block = system.split("# Memory index")[1]
+    assert "(none)" not in block.split("Today's date")[0]
+    assert all(n in block for n in ("teacher-preferences.md", "class-notes.md", "lesson-log.md"))
+    assert (data_dir / "memory" / "INDEX.md").exists()
+
+
+def test_a_first_add_after_ensure_keeps_the_header(memory_dir):
+    memory.ensure_files()
+    memory.add("lesson-log.md", ROW)
+    text = (memory_dir / "lesson-log.md").read_text()
+    assert text.startswith("# Lesson log") and text.rstrip().endswith(ROW)

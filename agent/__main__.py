@@ -13,7 +13,7 @@ import threading
 from datetime import date
 from pathlib import Path
 
-from . import emailer, menu, settings
+from . import emailer, memory, menu, settings
 from .topics import TopicStore
 from .usage import Meter
 from .channel import TerminalChannel
@@ -44,7 +44,7 @@ def build_system() -> str:
             read(ROOT / "config" / "system-prompt.md"),
             "# Teacher profile\n" + read(ROOT / "config" / "teacher-profile.md"),
             "# Course outline\n" + read(ROOT / "config" / "course-outline.md"),
-            "# Memory index\n" + read(DATA / "memory" / "INDEX.md"),
+            memory.index(),
             f"Today's date: {date.today().isoformat()}",
         ]
     )
