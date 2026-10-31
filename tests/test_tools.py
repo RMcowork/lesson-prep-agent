@@ -151,6 +151,41 @@ def test_add_to_knowledge_refuses_files_outside_the_job_folder(runner, kb, tmp_p
     assert not any((kb.KNOWLEDGE / "generated").rglob("secret.txt")) if (kb.KNOWLEDGE / "generated").exists() else True
 
 
+def test_add_to_knowledge_never_overwrites(runner, kb):
+    """Ticket #40: a second save with the same file name used to replace the first one, with no backup."""
+    import docx as d
+
+    saved = kb.KNOWLEDGE / "generated" / runner.out_dir.name
+    docx(runner, "first version")
+    runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    docx(runner, "second version")                                           # the teacher asked for a change, then saves again
+    msg = runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    assert "plan.docx as plan-v2.docx" in msg
+    assert d.Document(saved / "plan.docx").paragraphs[1].text == "first version"        # the first save is untouched
+    assert d.Document(saved / "plan-v2.docx").paragraphs[1].text == "second version"
+    docx(runner, "third version")
+    assert "plan.docx as plan-v3.docx" in runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    assert sorted(p.name for p in saved.iterdir()) == ["plan-v2.docx", "plan-v3.docx", "plan.docx"]
+
+
+def test_saving_identical_content_again_does_nothing_and_says_so(runner, kb):
+    saved = kb.KNOWLEDGE / "generated" / runner.out_dir.name
+    docx(runner, "same")
+    runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    msg = runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    assert "Already saved, identical: plan.docx" in msg and "Saved plan" not in msg
+    assert sorted(p.name for p in saved.iterdir()) == ["plan.docx"]
+
+
+def test_a_save_of_several_files_reports_each_one(runner, kb):
+    runner.run("create_xlsx", {"filename": "task", "sheets": [{"name": "S", "rows": [["a"]]}]})
+    docx(runner, "v1")
+    runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    docx(runner, "v2")
+    msg = runner.run("add_to_knowledge", {"filenames": ["plan.docx", "task.xlsx"]})
+    assert "Saved plan.docx as plan-v2.docx, task.xlsx" in msg
+
+
 # --- asking the teacher -----------------------------------------------------------------------------
 def test_ask_user_with_options_returns_the_chosen_option(tmp_path):
     r = ToolRunner(tmp_path, ScriptedChannel([1]))

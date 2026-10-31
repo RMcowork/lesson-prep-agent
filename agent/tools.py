@@ -219,18 +219,34 @@ class ToolRunner:
         return core.search_knowledge(query, topic, int(k), source)
 
     def _t_add_to_knowledge(self, filenames):
+        """Copy approved files into knowledge/generated/. A file is never replaced silently: the same name with
+        different content is saved as name-v2, name-v3 ...; identical content is skipped."""
         from rag import core
 
         dest = core.KNOWLEDGE / "generated" / self.out_dir.name
         dest.mkdir(parents=True, exist_ok=True)
-        copied = []
+        saved, unchanged = [], []
         for name in filenames:
             src = self.out_dir / Path(name).name
             if not src.is_file():
                 raise ValueError(f"No such output file: {name}")
-            shutil.copy2(src, dest / src.name)
-            copied.append(src.name)
-        return f"Saved {', '.join(copied)} to knowledge/generated/{dest.name}. {core.reindex()}"
+            target = dest / src.name
+            if target.exists():
+                if target.read_bytes() == src.read_bytes():
+                    unchanged.append(src.name)
+                    continue
+                n = 2
+                while (dest / f"{src.stem}-v{n}{src.suffix}").exists():
+                    n += 1
+                target = dest / f"{src.stem}-v{n}{src.suffix}"
+            shutil.copy2(src, target)
+            saved.append(target.name if target.name == src.name else f"{src.name} as {target.name}")
+        said = []
+        if saved:
+            said.append("Saved " + ", ".join(saved))
+        if unchanged:
+            said.append("Already saved, identical: " + ", ".join(unchanged))
+        return f"{'; '.join(said)} in knowledge/generated/{dest.name}. {core.reindex()}"
 
     def _t_web_search(self, query):
         from ddgs import DDGS
