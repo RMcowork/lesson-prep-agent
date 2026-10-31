@@ -3,8 +3,14 @@ Facts are graded exactly. Wording is only graded by a second model where a case 
 import re
 from dataclasses import dataclass, field
 
+from agent import settings
+
 CREATE = ("create_docx", "create_xlsx", "create_pptx")
-MAX_TURNS = 15
+
+
+def max_turns() -> int:
+    """Most model calls one case may use (eval_max_turns in config/agent.toml)."""
+    return settings.get().eval_max_turns
 
 
 @dataclass
@@ -35,8 +41,8 @@ def grade(expect: dict, t: Trace) -> list:
     fails = []
     names = t.names()
 
-    if t.turns > MAX_TURNS:
-        fails.append(f"used {t.turns} model calls (limit {MAX_TURNS})")
+    if t.turns > max_turns():
+        fails.append(f"used {t.turns} model calls (limit {max_turns()})")
     for n in expect.get("called", []):
         if n not in names:
             fails.append(f"did not call {n}")

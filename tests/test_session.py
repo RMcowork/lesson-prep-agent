@@ -7,9 +7,10 @@ import docx
 import pytest
 
 import agent.__main__ as app
+from agent.settings import Settings
 from tests.helpers import FakeProvider, ScriptedChannel, call, docx_call, reply
 
-CFG = {"max_turns": 10}
+CFG = Settings(max_turns=10)
 
 
 @pytest.fixture(autouse=True)

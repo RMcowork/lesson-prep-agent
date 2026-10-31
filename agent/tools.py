@@ -7,14 +7,13 @@ import socket
 from pathlib import Path
 from urllib.parse import urlparse
 
-from . import docs
+from . import docs, settings
 from .channel import TerminalChannel
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get("AGENT_DATA_DIR", ROOT)).resolve()
 MEMORY_DIR = DATA / "memory"
 MEMORY_FILES = {"teacher-preferences.md", "class-notes.md", "lesson-log.md"}
-MAX_WEB_CHARS = 8000
 
 BLOCKS_SCHEMA = {
     "type": "array",
@@ -233,12 +232,13 @@ class ToolRunner:
     def _t_web_search(self, query):
         from ddgs import DDGS
 
+        s = settings.get()
         results = []
         # DuckDuckGo directly is fast and handles Arabic/Hebrew; the automatic mode
         # (several engines in turn) is only a fallback because slow engines can time out.
-        for backend, timeout in (("duckduckgo", 10), ("auto", 20)):
+        for backend, timeout in (("duckduckgo", s.web_search_timeout_s), ("auto", s.web_search_fallback_timeout_s)):
             try:
-                results = DDGS(timeout=timeout).text(query, max_results=6, backend=backend)
+                results = DDGS(timeout=timeout).text(query, max_results=s.web_results, backend=backend)
             except Exception:
                 results = []
             if results:
@@ -253,11 +253,12 @@ class ToolRunner:
 
         if not _is_public_url(url):
             return "Refused: only public http(s) URLs can be fetched."
-        resp = httpx.get(url, timeout=20, follow_redirects=False, headers={"User-Agent": "lesson-prep-agent"})
+        s = settings.get()
+        resp = httpx.get(url, timeout=s.web_fetch_timeout_s, follow_redirects=False, headers={"User-Agent": "lesson-prep-agent"})
         text = re.sub(r"(?is)<(script|style).*?</\1>", " ", resp.text)
         text = re.sub(r"(?s)<[^>]+>", " ", text)
         text = re.sub(r"\s+", " ", text).strip()
-        return "UNTRUSTED WEB CONTENT:\n" + text[:MAX_WEB_CHARS]
+        return "UNTRUSTED WEB CONTENT:\n" + text[: s.web_fetch_chars]
 
     # --- memory ---
     def _memory_path(self, name):

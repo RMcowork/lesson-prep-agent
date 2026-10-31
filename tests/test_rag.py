@@ -6,7 +6,7 @@ import zlib
 
 import pytest
 
-from agent import docs
+from agent import docs, settings
 from rag import core
 
 
@@ -44,8 +44,9 @@ def blank_pdf(path):
 def test_chunks_overlap_and_cover_the_text():
     words = [f"w{i}" for i in range(600)]
     chunks = list(core.chunk(" ".join(words)))
-    assert all(len(c.split()) <= core.CHUNK_WORDS for c in chunks)
-    assert chunks[0].split()[-core.OVERLAP_WORDS:] == chunks[1].split()[:core.OVERLAP_WORDS]
+    s = settings.get()
+    assert all(len(c.split()) <= s.chunk_words for c in chunks)
+    assert chunks[0].split()[-s.overlap_words:] == chunks[1].split()[:s.overlap_words]
     assert set(" ".join(chunks).split()) == set(words)
 
 
@@ -138,4 +139,4 @@ def test_the_model_is_released_after_indexing(kb, monkeypatch):
 
 
 def test_embedding_uses_a_bounded_number_of_threads():
-    assert 2 <= core.THREADS <= (core.os.cpu_count() or 4) and core.BATCH_SIZE == 16
+    assert 2 <= core._threads() <= (core.os.cpu_count() or 4) and settings.get().embed_batch_size == 16

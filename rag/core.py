@@ -6,23 +6,28 @@ import gc
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:  # rag/server.py runs as a script from the rag folder
+    sys.path.insert(0, str(ROOT))
+
+from agent import settings  # noqa: E402
+
 DATA = Path(os.environ.get("AGENT_DATA_DIR", ROOT)).resolve()  # mount a volume here when deployed
 KNOWLEDGE = DATA / "knowledge"
 INDEX_DIR = DATA / "rag-index"
 MANIFEST = INDEX_DIR / "manifest.json"
-MODEL_NAME = "intfloat/multilingual-e5-large"
-CHUNK_WORDS = 250
-OVERLAP_WORDS = 40
-# CPU threads for embedding. Default: half the cores (at least 2) so the machine stays usable.
-THREADS = int(os.environ.get("RAG_THREADS") or max(2, (os.cpu_count() or 4) // 2))
-BATCH_SIZE = 16  # small batches keep memory bounded with the large model
 SUPPORTED = {".pdf", ".docx", ".pptx", ".xlsx", ".txt", ".md", ".csv"}
 
 _model = None
 _collection = None
+
+
+def _threads() -> int:
+    """CPU threads for embedding: embed_threads, or half the cores (at least 2) so the machine stays usable."""
+    return settings.get().embed_threads or max(2, (os.cpu_count() or 4) // 2)
 
 
 def _get_model():
@@ -31,7 +36,7 @@ def _get_model():
         from fastembed import TextEmbedding
 
         _model = TextEmbedding(
-            model_name=MODEL_NAME, cache_dir=str(INDEX_DIR / "models"), threads=THREADS
+            model_name=settings.get().embedding_model, cache_dir=str(INDEX_DIR / "models"), threads=_threads()
         )
     return _model
 
@@ -60,7 +65,7 @@ def _embed(texts, prefix):
     # e5 models expect "query: " / "passage: " prefixes; fastembed returns normalized vectors
     return [
         v.tolist()
-        for v in _get_model().embed([f"{prefix}: {t}" for t in texts], batch_size=BATCH_SIZE)
+        for v in _get_model().embed([f"{prefix}: {t}" for t in texts], batch_size=settings.get().embed_batch_size)
     ]
 
 
@@ -111,13 +116,13 @@ def extract(path: Path):
 
 
 def chunk(text: str):
-    words = text.split()
-    step = CHUNK_WORDS - OVERLAP_WORDS
+    words, s = text.split(), settings.get()
+    size, step = s.chunk_words, s.chunk_words - s.overlap_words
     for start in range(0, max(len(words), 1), step):
-        piece = " ".join(words[start : start + CHUNK_WORDS])
+        piece = " ".join(words[start : start + size])
         if piece.strip():
             yield piece
-        if start + CHUNK_WORDS >= len(words):
+        if start + size >= len(words):
             break
 
 

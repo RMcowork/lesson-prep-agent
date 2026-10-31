@@ -19,8 +19,14 @@ import ssl
 from email.message import EmailMessage
 from pathlib import Path
 
-MAX_TOTAL_BYTES = 20 * 1024 * 1024  # stay under common 25 MB mailbox limits
+from . import settings
+
 ADDRESS = re.compile(r"^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$")
+
+
+def max_total_bytes() -> int:
+    """Total attachment size allowed (email_max_mb in config/agent.toml)."""
+    return settings.get().email_max_mb * 1024 * 1024
 
 
 def is_address(text: str) -> bool:
@@ -53,7 +59,7 @@ def send_files(to: str, subject: str, body: str, paths) -> str:
     attached, skipped, total = [], [], 0
     for path in map(Path, paths):
         size = path.stat().st_size
-        if total + size > MAX_TOTAL_BYTES:
+        if total + size > max_total_bytes():
             skipped.append(path.name)
             continue
         ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
@@ -68,9 +74,9 @@ def send_files(to: str, subject: str, body: str, paths) -> str:
     port = int(os.environ.get("SMTP_PORT", "465"))
     try:
         if port == 465:
-            server = smtplib.SMTP_SSL(host, port, context=ssl.create_default_context(), timeout=60)
+            server = smtplib.SMTP_SSL(host, port, context=ssl.create_default_context(), timeout=settings.get().smtp_timeout_s)
         else:
-            server = smtplib.SMTP(host, port, timeout=60)
+            server = smtplib.SMTP(host, port, timeout=settings.get().smtp_timeout_s)
         with server:
             if port != 465:
                 server.starttls(context=ssl.create_default_context())

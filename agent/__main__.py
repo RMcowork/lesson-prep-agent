@@ -10,11 +10,10 @@ import json
 import os
 import re
 import threading
-import tomllib
 from datetime import date
 from pathlib import Path
 
-from . import emailer, menu
+from . import emailer, menu, settings
 from .topics import TopicStore
 from .usage import Meter
 from .channel import TerminalChannel
@@ -70,7 +69,7 @@ def run_session(provider, cfg, task: str, name: str, ch, lock=None, allow_web: b
     out_dir.mkdir(parents=True, exist_ok=True)
     log_path = DATA / "logs" / f"{folder}.json"
     runner = ToolRunner(out_dir, ch, allow_web)
-    system, max_turns = build_system(), int(cfg.get("max_turns", 40))
+    system, max_turns = build_system(), cfg.max_turns
     state = {"messages": None}
     meter = Meter()
     delivered = {}
@@ -240,7 +239,8 @@ def main():
         print(core.reindex())
         return
 
-    cfg = tomllib.loads((ROOT / "config" / "agent.toml").read_text())
+    cfg = settings.load()
+    settings.use(cfg)
     ch = TerminalChannel()
 
     if args.cmd in (None, "menu"):

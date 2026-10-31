@@ -7,11 +7,12 @@ import pytest
 
 import agent.__main__ as app
 from agent.telegram_bot import Bot
+from agent.settings import Settings
 from agent.topics import TopicStore
 from tests.helpers import FakeProvider, FakeTelegramAPI, ScriptedChannel, call, docx_call, reply, run_bot_until_done
 
 pytestmark = pytest.mark.e2e
-CFG = {"max_turns": 10}
+CFG = Settings(max_turns=10)
 
 
 def lesson_script():

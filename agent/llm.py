@@ -130,9 +130,10 @@ class OpenAICompatProvider:
         return reply
 
 
-def make_provider(cfg: dict):
-    kind = cfg.get("provider", "anthropic")
-    args = (cfg.get("model"), int(cfg.get("max_tokens", 8000)), cfg.get("base_url", ""))
+def make_provider(cfg):
+    """cfg is a Settings object (agent/settings.py)."""
+    kind = cfg.provider
+    args = (cfg.model, cfg.max_tokens, cfg.base_url)
     if kind == "anthropic":
         return AnthropicProvider(*args)
     if kind == "openai":

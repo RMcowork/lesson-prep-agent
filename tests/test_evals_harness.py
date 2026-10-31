@@ -104,7 +104,7 @@ def test_memory_and_wording_checks():
 
 
 def test_too_many_model_calls_fail_a_case():
-    assert grader.grade({}, trace(*["ask_user"] * (grader.MAX_TURNS + 1)))
+    assert grader.grade({}, trace(*["ask_user"] * (grader.max_turns() + 1)))
 
 
 # --- the baseline gate and the history file --------------------------------------------------------

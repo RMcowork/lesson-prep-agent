@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from agent.llm import AnthropicProvider, OpenAICompatProvider, make_provider
+from agent.settings import Settings
 from agent.usage import Meter
 import pytest
 
@@ -46,7 +47,7 @@ def test_openai_message_conversion_keeps_tool_results():
 
 def test_unknown_provider_stops_with_a_clear_message():
     with pytest.raises(SystemExit):
-        make_provider({"provider": "nope", "model": "m"})
+        make_provider(Settings(provider="nope"))
 
 
 def test_missing_api_key_stops_with_a_clear_message(monkeypatch):

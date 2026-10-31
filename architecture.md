@@ -134,6 +134,8 @@ Known weakness: two sessions on the same topic on the same day share a folder an
 | History | Whole conversation resent every call | Needed for revisions; capped later (#14) |
 | Embeddings | `multilingual-e5-large`, local, no per-use cost | Arabic, Hebrew, English retrieval; files stay on the machine |
 
+**Every value you can change** (model, limits, timeouts, chunk sizes, eval thresholds) is a setting in `config/agent.toml`, defined once in `agent/settings.py` and documented in [config/README.md](config/README.md). Secrets and paths are not settings: they stay in `.env` (see Secrets).
+
 **Measured per lesson** (3 real sessions, before the revision loop existed): about **10 model calls**, **14 to 18 tool calls**, **78,000 to 107,000 input tokens** (history resent each call), about **6,000 output tokens**. The cost is the model bill, not hosting. Dollar figures need the current price of the chosen model, set in `config/agent.toml` when #11 lands; they are not guessed here.
 
 ## Limits
