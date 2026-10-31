@@ -1,6 +1,6 @@
 # Lesson-Prep Agent
 
-An AI agent that prepares lesson plans, worksheets, quizzes/exams (with answer keys and rubrics) and slides for a K10–K11 data-analysis course in Arabic, Hebrew and English. It uses your own course material (RAG), web search, and file-based memory. Design: see [SPEC.md](SPEC.md) for what is built, and [Architecture.md](Architecture.md) for the full system design (triggers, data flow, database, dashboard, deployment).
+An AI agent that prepares lesson plans, worksheets, quizzes/exams (with answer keys and rubrics) and slides for a K10–K11 data-analysis course in Arabic, Hebrew and English. It uses your own course material (RAG), web search, and file-based memory. The plan is in the repo: [spec.md](spec.md) (what, for whom, how many), [architecture.md](architecture.md) (how, where, why) and [practice.md](practice.md) (how work is done). What is built today: [docs/implementation.md](docs/implementation.md).
 
 It works in two ways:
 - **Standalone program** (`python -m agent ...`): runs on its own, calls an LLM API you choose.
@@ -84,3 +84,24 @@ Edit `config/teacher-profile.md`, `config/course-outline.md` (and optionally `co
 
 ## Privacy
 `knowledge/`, `memory/`, `output/`, `rag-index/` and `.env` are git-ignored.
+
+## How the project is run
+The repo is the plan: if a decision is not in one of these files, it was not made.
+
+| File | Answers |
+|---|---|
+| [spec.md](spec.md) | Who uses it, what it must do, what is not in v1, how fast, what data, which limits (with numbers), and the 12 checks that define "done" |
+| [architecture.md](architecture.md) | Components, flows, storage, model, limits, where each piece would run, secrets, and every decision with its reason |
+| [practice.md](practice.md) | The eight steps every ticket goes through, branch and pull-request rules, and the three numbers each PR carries |
+| `tests/` | Code tests, the model mocked: same input, same output. `pytest -m "not e2e"` |
+| `evals/` | Agent evals: 30 cases, an exact grader, and a history of scores. `python -m evals.run` (real model, costs tokens) |
+| `.github/workflows/ci.yml` | The gate: tests, secret scan, evals when the prompt, tools or model change. No deploy step |
+| [GitHub Project](https://github.com/RMcowork/lesson-prep-agent/issues) | One card per ticket, milestones v1 to v3, bugs as issues |
+
+```bash
+pip install -r requirements-dev.txt
+pytest -m "not e2e"                 # tests: free, fast, no API key
+python -m evals.run --mock          # proves the eval harness works; costs nothing
+python -m evals.run --estimate      # rough cost of a real run, spends nothing
+python -m evals.run                 # real model against the baseline (needs the API key)
+```

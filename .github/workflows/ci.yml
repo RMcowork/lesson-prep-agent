@@ -1,0 +1,116 @@
+# The gate: what every change must pass (practice.md). Red means not merged, never "merge and fix later".
+# Three numbers per pull request appear in each job's summary: tests passed, eval pass rate, tokens per eval run.
+# This workflow only checks. It builds and ships nothing.
+name: gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: tests (model mocked)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # the secret scan reads every commit, not only the last
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            rag/requirements.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Run the tests (no network, no API key)
+        run: pytest -m "not e2e" -q | tee pytest.out
+      - name: Number 1, tests passed
+        if: always()
+        run: |
+          echo "### Tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Tests passed:** $(tail -1 pytest.out 2>/dev/null || echo 'did not run')" >> "$GITHUB_STEP_SUMMARY"
+
+  secrets:
+    name: secret scan (repo and every commit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pytest pytest-timeout
+      - name: Look for sk-ant, bot tokens and passwords in files and history
+        run: pytest tests/test_secrets.py -q
+
+  evals-harness:
+    name: evals harness (free)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Check the cases file is well formed
+        run: python -m evals.run --validate
+      - name: Prove the graders work with the stand-in model
+        run: python -m evals.run --mock --runs 1
+
+  evals-real:
+    name: evals (real model)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [evals-harness]
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Did the prompt, the tools or the model change?
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "needed=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "${{ github.event_name }}" != "pull_request" ]; then echo "needed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          base="${{ github.event.pull_request.base.sha }}"
+          if git diff --name-only "$base" HEAD | grep -E '^(config/system-prompt.md|config/agent.toml|agent/tools.py|agent/llm.py|evals/cases.yaml)$'; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "### Evals" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Eval pass rate:** evals not needed: the prompt, tools and model did not change" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.changed.outputs.needed == 'true' && env.ANTHROPIC_API_KEY != ''
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Run the evals against the baseline (costs tokens)
+        if: steps.changed.outputs.needed == 'true' && env.ANTHROPIC_API_KEY != ''
+        run: |
+          pip install -r requirements-dev.txt
+          python -m evals.run --no-record
+      - name: No API key in this run
+        if: steps.changed.outputs.needed == 'true' && env.ANTHROPIC_API_KEY == ''
+        run: |
+          echo "::warning::The prompt, tools or model changed but there is no ANTHROPIC_API_KEY secret, so the real evals did not run. Run python -m evals.run locally and paste the numbers into the pull request."
+          echo "### Evals" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Eval pass rate:** NOT RUN (no API key in this run). Run them locally and paste the numbers." >> "$GITHUB_STEP_SUMMARY"

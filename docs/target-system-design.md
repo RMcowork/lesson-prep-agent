@@ -1,4 +1,6 @@
-# Architecture: Lesson-Prep Agent
+# Target system design: Lesson-Prep Agent
+
+> Longer-term design (database, dashboard, more triggers). The v1 source of truth is [../architecture.md](../architecture.md); this file was `Architecture.md`.
 
 How the system is triggered, how data flows through it, and where every output goes. This document covers the whole system: channels, agent, database, dashboard and deployment.
 
@@ -448,5 +450,5 @@ rag/core.py       extract, chunk, embed, index, search
 rag/server.py     MCP wrapper for Claude Code
 config/           agent.toml, system-prompt.md, teacher profile, course outline
 Dockerfile        container image
-SPEC.md           detailed specification of what is built
+docs/implementation.md   detailed notes on what is built
 ```
