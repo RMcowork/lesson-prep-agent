@@ -55,6 +55,16 @@ def slug(text: str) -> str:
     return re.sub(r"[^\w]+", "-", text.strip().lower(), flags=re.UNICODE).strip("-")[:40] or "session"
 
 
+def unique_folder(stem: str) -> str:
+    """date-topic, then date-topic-2, date-topic-3 ... so a new session never overwrites an earlier one's files or log.
+    Names still sort by date."""
+    name, n = stem, 1
+    while (DATA / "output" / name).exists() or (DATA / "logs" / f"{name}.json").exists():
+        n += 1
+        name = f"{stem}-{n}"
+    return name
+
+
 FINAL_PHASE = (
     "The teacher is satisfied with the files. Now finish up: ask the teacher with ask_user whether "
     "to save the final files to the knowledge base (call add_to_knowledge if yes), then update memory "
@@ -65,7 +75,7 @@ FINAL_PHASE = (
 
 def run_session(provider, cfg, task: str, name: str, ch, lock=None, allow_web: bool = True):
     """One working session: generate, then keep taking the teacher's notes until they are happy."""
-    folder = f"{date.today().isoformat()}-{slug(name)}"
+    folder = unique_folder(f"{date.today().isoformat()}-{slug(name)}")
     out_dir = DATA / "output" / folder
     out_dir.mkdir(parents=True, exist_ok=True)
     log_path = DATA / "logs" / f"{folder}.json"

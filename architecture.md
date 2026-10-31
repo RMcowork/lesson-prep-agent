@@ -118,9 +118,9 @@ One volume, plain files, and a search index. No database yet.
 | Generated file | filename inside `output/<date>-<topic>/`; older versions `previous-versions/<name>-vN` | `output/` |
 | Memory entry | one of three file names | `memory/` |
 | Topic | name, unique ignoring case | `topics.json` |
-| Session log | `logs/<date>-<topic>.json` | `logs/` |
+| Session log | same name as its folder, `logs/<date>-<topic>[-N].json` | `logs/` |
 
-Known weakness: two sessions on the same topic on the same day share a folder and a log (#29).
+A session folder is `<date>-<topic>`; a second session on the same topic and day becomes `<date>-<topic>-2`, then `-3`, so no session ever overwrites another's files or log (#29).
 
 ## Model
 
