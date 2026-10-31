@@ -25,6 +25,7 @@ class Settings:
     max_turns: int = 40
     # --- memory ---
     memory_entry_chars: int = 600
+    memory_context_chars: int = 4000
     # --- web tools ---
     web_results: int = 6
     web_search_timeout_s: int = 10

@@ -94,7 +94,7 @@ The repo is the plan: if a decision is not in one of these files, it was not mad
 | [architecture.md](architecture.md) | Components, flows, storage, model, limits, where each piece would run, secrets, and every decision with its reason |
 | [practice.md](practice.md) | The eight steps every ticket goes through, branch and pull-request rules, and the three numbers each PR carries |
 | `tests/` | Code tests, the model mocked: same input, same output. `pytest -m "not e2e"` |
-| `evals/` | Agent evals: 30 cases, an exact grader, and a history of scores. `python -m evals.run` (real model, costs tokens) |
+| `evals/` | Agent evals: 31 cases, an exact grader, and a history of scores. `python -m evals.run` (real model, costs tokens) |
 | `.github/workflows/ci.yml` | The gate: tests, secret scan, evals when the prompt, tools or model change. No deploy step |
 | [GitHub Project](https://github.com/RMcowork/lesson-prep-agent/issues) | One card per ticket, milestones v1 to v3, bugs as issues |
 

@@ -166,3 +166,69 @@ def test_a_first_add_after_ensure_keeps_the_header(memory_dir):
     memory.add("lesson-log.md", ROW)
     text = (memory_dir / "lesson-log.md").read_text()
     assert text.startswith("# Lesson log") and text.rstrip().endswith(ROW)
+
+
+# --- ticket #32: what the agent remembers is in front of the model before it plans -----------------
+def test_preferences_and_class_notes_are_shown_but_not_the_lesson_log():
+    memory.add("teacher-preferences.md", "always a 5-minute warm-up")
+    memory.add("class-notes.md", "K11 is mixed level")
+    memory.add("lesson-log.md", ROW)
+    shown = memory.context()
+    assert "## Teacher preferences" in shown and "- always a 5-minute warm-up" in shown
+    assert "## Class notes" in shown and "- K11 is mixed level" in shown
+    assert "Data types" not in shown and "lesson-log" not in shown          # the log only grows; it stays out of the prompt
+
+
+def test_nothing_remembered_yet_is_said_plainly_without_headers_or_placeholders(memory_dir):
+    memory.ensure_files()
+    assert memory.context() == "(nothing remembered yet)"
+    (memory_dir / "teacher-preferences.md").write_text("# Teacher preferences\n\n(Empty. The agent adds preferences here.)\n")
+    assert memory.context() == "(nothing remembered yet)"
+
+
+def test_a_long_file_is_capped_and_the_newest_lines_survive():
+    settings.use(Settings(memory_context_chars=200, memory_entry_chars=600))
+    for i in range(40):
+        memory.add("teacher-preferences.md", f"preference number {i:02d}")
+    shown = memory.context()
+    assert "preference number 39" in shown and "preference number 00" not in shown      # the latest correction wins
+    assert "Older entries not shown" in shown and "read_memory" in shown
+    assert len(shown) < 200 + 150                                                       # cap plus the one-line note
+
+
+def test_the_cap_applies_to_each_file_separately():
+    settings.use(Settings(memory_context_chars=100))
+    for i in range(10):
+        memory.add("teacher-preferences.md", f"preference number {i}")
+        memory.add("class-notes.md", f"class note number {i}")
+    shown = memory.context()
+    assert "preference number 9" in shown and "class note number 9" in shown
+
+
+def test_one_line_longer_than_the_cap_is_still_shown_not_dropped():
+    settings.use(Settings(memory_context_chars=10, memory_entry_chars=600))
+    memory.add("teacher-preferences.md", "a preference that is longer than the tiny cap")
+    assert "longer than the tiny cap" in memory.context()
+
+
+def test_the_model_gets_the_memory_before_its_first_call(data_dir, monkeypatch):
+    """The point of #32: not left to the model's initiative. The first model call already carries the preferences."""
+    import agent.__main__ as app
+    from tests.helpers import FakeProvider, ScriptedChannel, call, docx_call, reply
+
+    for k in ("SMTP_USER", "SMTP_PASSWORD"):
+        monkeypatch.delenv(k, raising=False)
+    memory.add("teacher-preferences.md", "always a 5-minute warm-up")
+    provider = FakeProvider([reply("", docx_call()), reply("done"),
+                             reply("", call("ask_user", question="Save?", options=["Yes", "No"])), reply("bye")])
+    app.run_session(provider, Settings(max_turns=10), "Prepare a lesson. Topic: X", "ctx", ScriptedChannel(["back", 1]))
+    first_system = provider.calls[0]["system"]
+    assert "What you remember about this teacher" in first_system and "- always a 5-minute warm-up" in first_system
+
+
+def test_memory_added_in_one_session_is_there_for_the_next(data_dir):
+    import agent.__main__ as app
+
+    assert "(nothing remembered yet)" in app.build_system()
+    memory.add("class-notes.md", "support students need worked examples")
+    assert "- support students need worked examples" in app.build_system()

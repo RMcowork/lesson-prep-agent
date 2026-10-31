@@ -65,6 +65,35 @@ def index() -> str:
         return INDEX                                  # the same text, just not saved to disk
 
 
+SHOWN = (("teacher-preferences.md", "Teacher preferences"), ("class-notes.md", "Class notes"))
+
+
+def context() -> str:
+    """What the model should remember before it plans: preferences and class notes, newest lines kept if too long.
+    Only real entries are shown (no headers or placeholders). The lesson log is not included: it only grows."""
+    cap = settings.get().memory_context_chars
+    parts = []
+    for name, title in SHOWN:
+        path = MEMORY_DIR / name
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        entries = [l.strip() for l in text.splitlines() if l.strip().startswith(("- ", "* "))]
+        if not entries:
+            continue
+        kept, size = [], 0
+        for line in reversed(entries):                # newest first, so the latest corrections survive the cap
+            if size + len(line) + 1 > cap and kept:
+                break
+            kept.append(line)
+            size += len(line) + 1
+        kept.reverse()
+        note = f"\n(Older entries not shown: {len(entries) - len(kept)}. Use read_memory for the full file.)" if len(kept) < len(entries) else ""
+        parts.append(f"## {title}\n" + "\n".join(kept) + note)
+    return "\n\n".join(parts) if parts else "(nothing remembered yet)"
+
+
 def read(name: str) -> str:
     _, path = _resolve(name)
     return path.read_text(encoding="utf-8") if path.exists() else "(empty)"

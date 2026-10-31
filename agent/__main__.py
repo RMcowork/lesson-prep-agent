@@ -45,6 +45,7 @@ def build_system() -> str:
             "# Teacher profile\n" + read(ROOT / "config" / "teacher-profile.md"),
             "# Course outline\n" + read(ROOT / "config" / "course-outline.md"),
             memory.index(),
+            "# What you remember about this teacher (apply it without being asked)\n" + memory.context(),
             f"Today's date: {date.today().isoformat()}",
         ]
     )

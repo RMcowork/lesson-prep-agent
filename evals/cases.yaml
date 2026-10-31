@@ -469,3 +469,26 @@
     - create_docx
     - create_xlsx
     - create_pptx
+- id: memory-preference-applied
+  group: memory
+  task: 'Prepare a lesson. Topic: Data types. Grade: K10. Length: 45 minutes. Language: English. Class level: Mixed class. Create: Lesson plan
+    (.docx). Web search is turned off: do not use it. The teacher chose these options from a menu, so do not ask for them again.'
+  knowledge:
+  - file: data-types.pdf
+    location: page 3
+    text: Numeric data are numbers such as age or price. Categorical data are labels such as city or colour. Dates are a special type.
+  memory:
+    teacher-preferences.md: '# Teacher preferences
+
+
+      - Always use a 5-minute warm-up.
+
+      '
+  expect:
+    called:
+    - create_docx
+    files_text_contains_any:
+    - 5-minute
+    - 5 minute
+    - five-minute
+    - five minute

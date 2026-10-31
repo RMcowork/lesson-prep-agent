@@ -17,6 +17,7 @@ max_turns = 40             # most model calls in one turn of work
 
 # --- memory ----------------------------------------------------------------------------------
 memory_entry_chars = 600   # longest single line the agent may remember (it is asked to shorten longer ones)
+memory_context_chars = 4000  # most characters of preferences, and of class notes, shown to the model before it plans (newest kept)
 
 # --- web tools (only when the teacher allows web search) ---------------------------------------------
 web_results = 6                    # results returned by one search

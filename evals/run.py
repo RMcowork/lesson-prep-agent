@@ -128,6 +128,9 @@ def run_case(case, provider, workdir):
     app.DATA = Path(workdir)
     from agent import memory
     memory.MEMORY_DIR = Path(workdir) / "memory"
+    for fname, text in (case.get("memory") or {}).items():          # what the agent already remembers in this case
+        memory.MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+        (memory.MEMORY_DIR / fname).write_text(text, encoding="utf-8")
     system = app.build_system()
     phase = case.get("phase", "lesson")
     meter, messages, task = Meter(), None, case["task"]
