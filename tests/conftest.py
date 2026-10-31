@@ -7,14 +7,22 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 
+@pytest.fixture(autouse=True)
+def fresh_settings(monkeypatch):
+    """Every test starts from the real config/agent.toml, and one test's settings never leak into another."""
+    from agent import settings
+
+    monkeypatch.setattr(settings, "_current", None)
+
+
 @pytest.fixture
 def data_dir(tmp_path, monkeypatch):
     """A private data folder, so a test can never touch the teacher's real files."""
     import agent.__main__ as app
-    import agent.tools as tools
+    import agent.memory as memory
 
     monkeypatch.setattr(app, "DATA", tmp_path)
-    monkeypatch.setattr(tools, "MEMORY_DIR", tmp_path / "memory")
+    monkeypatch.setattr(memory, "MEMORY_DIR", tmp_path / "memory")
     monkeypatch.setenv("AGENT_DATA_DIR", str(tmp_path))
     return tmp_path
 

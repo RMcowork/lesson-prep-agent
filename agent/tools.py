@@ -1,20 +1,15 @@
 """Tools the standalone agent can call."""
 import ipaddress
-import os
 import re
 import shutil
 import socket
 from pathlib import Path
 from urllib.parse import urlparse
 
-from . import docs
+from . import docs, memory, settings
 from .channel import TerminalChannel
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = Path(os.environ.get("AGENT_DATA_DIR", ROOT)).resolve()
-MEMORY_DIR = DATA / "memory"
-MEMORY_FILES = {"teacher-preferences.md", "class-notes.md", "lesson-log.md"}
-MAX_WEB_CHARS = 8000
 
 BLOCKS_SCHEMA = {
     "type": "array",
@@ -86,12 +81,19 @@ TOOLS = [
         },
     },
     {
-        "name": "write_memory",
-        "description": "Replace the full content of a memory file. Read it first and keep existing entries.",
+        "name": "add_memory",
+        "description": (
+            "Remember ONE new fact: appends a single line to teacher-preferences.md, class-notes.md or lesson-log.md. "
+            "It only adds; it never replaces or removes earlier entries. For lesson-log.md the entry must be one table row: "
+            "| date | topic | language | files | feedback |. Never include student names or personal data."
+        ),
         "parameters": {
             "type": "object",
-            "properties": {"name": {"type": "string"}, "content": {"type": "string"}},
-            "required": ["name", "content"],
+            "properties": {
+                "name": {"type": "string", "enum": ["teacher-preferences.md", "class-notes.md", "lesson-log.md"]},
+                "entry": {"type": "string", "description": "One short line"},
+            },
+            "required": ["name", "entry"],
         },
     },
     {
@@ -217,28 +219,45 @@ class ToolRunner:
         return core.search_knowledge(query, topic, int(k), source)
 
     def _t_add_to_knowledge(self, filenames):
+        """Copy approved files into knowledge/generated/. A file is never replaced silently: the same name with
+        different content is saved as name-v2, name-v3 ...; identical content is skipped."""
         from rag import core
 
         dest = core.KNOWLEDGE / "generated" / self.out_dir.name
         dest.mkdir(parents=True, exist_ok=True)
-        copied = []
+        saved, unchanged = [], []
         for name in filenames:
             src = self.out_dir / Path(name).name
             if not src.is_file():
                 raise ValueError(f"No such output file: {name}")
-            shutil.copy2(src, dest / src.name)
-            copied.append(src.name)
-        return f"Saved {', '.join(copied)} to knowledge/generated/{dest.name}. {core.reindex()}"
+            target = dest / src.name
+            if target.exists():
+                if target.read_bytes() == src.read_bytes():
+                    unchanged.append(src.name)
+                    continue
+                n = 2
+                while (dest / f"{src.stem}-v{n}{src.suffix}").exists():
+                    n += 1
+                target = dest / f"{src.stem}-v{n}{src.suffix}"
+            shutil.copy2(src, target)
+            saved.append(target.name if target.name == src.name else f"{src.name} as {target.name}")
+        said = []
+        if saved:
+            said.append("Saved " + ", ".join(saved))
+        if unchanged:
+            said.append("Already saved, identical: " + ", ".join(unchanged))
+        return f"{'; '.join(said)} in knowledge/generated/{dest.name}. {core.reindex()}"
 
     def _t_web_search(self, query):
         from ddgs import DDGS
 
+        s = settings.get()
         results = []
         # DuckDuckGo directly is fast and handles Arabic/Hebrew; the automatic mode
         # (several engines in turn) is only a fallback because slow engines can time out.
-        for backend, timeout in (("duckduckgo", 10), ("auto", 20)):
+        for backend, timeout in (("duckduckgo", s.web_search_timeout_s), ("auto", s.web_search_fallback_timeout_s)):
             try:
-                results = DDGS(timeout=timeout).text(query, max_results=6, backend=backend)
+                results = DDGS(timeout=timeout).text(query, max_results=s.web_results, backend=backend)
             except Exception:
                 results = []
             if results:
@@ -253,28 +272,19 @@ class ToolRunner:
 
         if not _is_public_url(url):
             return "Refused: only public http(s) URLs can be fetched."
-        resp = httpx.get(url, timeout=20, follow_redirects=False, headers={"User-Agent": "lesson-prep-agent"})
+        s = settings.get()
+        resp = httpx.get(url, timeout=s.web_fetch_timeout_s, follow_redirects=False, headers={"User-Agent": "lesson-prep-agent"})
         text = re.sub(r"(?is)<(script|style).*?</\1>", " ", resp.text)
         text = re.sub(r"(?s)<[^>]+>", " ", text)
         text = re.sub(r"\s+", " ", text).strip()
-        return "UNTRUSTED WEB CONTENT:\n" + text[:MAX_WEB_CHARS]
+        return "UNTRUSTED WEB CONTENT:\n" + text[: s.web_fetch_chars]
 
     # --- memory ---
-    def _memory_path(self, name):
-        name = Path(name).name
-        if name not in MEMORY_FILES:
-            raise ValueError(f"Memory file must be one of {sorted(MEMORY_FILES)}")
-        return MEMORY_DIR / name
-
     def _t_read_memory(self, name):
-        path = self._memory_path(name)
-        return path.read_text(encoding="utf-8") if path.exists() else "(empty)"
+        return memory.read(name)
 
-    def _t_write_memory(self, name, content):
-        path = self._memory_path(name)
-        MEMORY_DIR.mkdir(exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-        return f"Saved {path.name}"
+    def _t_add_memory(self, name, entry):
+        return memory.add(name, entry)
 
     # --- interaction ---
     def _t_ask_user(self, question, options=None):

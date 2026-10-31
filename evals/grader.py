@@ -1,10 +1,17 @@
 """Exact checks on what the agent did: which tools, in which order, with which fields (spec.md §7).
 Facts are graded exactly. Wording is only graded by a second model where a case has a rubric (ticket #28)."""
+import json
 import re
 from dataclasses import dataclass, field
 
+from agent import settings
+
 CREATE = ("create_docx", "create_xlsx", "create_pptx")
-MAX_TURNS = 15
+
+
+def max_turns() -> int:
+    """Most model calls one case may use (eval_max_turns in config/agent.toml)."""
+    return settings.get().eval_max_turns
 
 
 @dataclass
@@ -35,8 +42,8 @@ def grade(expect: dict, t: Trace) -> list:
     fails = []
     names = t.names()
 
-    if t.turns > MAX_TURNS:
-        fails.append(f"used {t.turns} model calls (limit {MAX_TURNS})")
+    if t.turns > max_turns():
+        fails.append(f"used {t.turns} model calls (limit {max_turns()})")
     for n in expect.get("called", []):
         if n not in names:
             fails.append(f"did not call {n}")
@@ -79,6 +86,10 @@ def grade(expect: dict, t: Trace) -> list:
         if any(c["name"] == rule["tool"] and c["input"].get(rule["path"]) == rule["equals"] for c in t.calls):
             fails.append(f"{rule['tool']} was called with {rule['path']}={rule['equals']!r}, which it must not")
 
+    if expect.get("files_text_contains_any"):
+        written = json.dumps([c["input"] for c in t.calls if c["name"] in CREATE], ensure_ascii=False).lower()
+        if not any(s.lower() in written for s in expect["files_text_contains_any"]):
+            fails.append(f"the files written never mention any of {expect['files_text_contains_any']}")
     said = t.said.lower()
     if expect.get("said_contains_any") and not any(s.lower() in said for s in expect["said_contains_any"]):
         fails.append(f"the teacher was never told any of {expect['said_contains_any']}")
@@ -96,9 +107,9 @@ def grade(expect: dict, t: Trace) -> list:
 KNOWN_CHECKS = {
     "called", "called_any", "not_called", "order", "approval_before_files", "ask_user_without_options", "ask_user_max",
     "ask_user_question_contains_any", "files_created_any", "recreated", "all_calls_arg", "no_call_arg",
-    "said_contains_any", "said_not_matches", "memory_contains_any", "memory_not_contains",
+    "said_contains_any", "said_not_matches", "memory_contains_any", "memory_not_contains", "files_text_contains_any",
 }
-KNOWN_TOOLS = {"search_knowledge", "add_to_knowledge", "web_search", "fetch_url", "read_memory", "write_memory", "ask_user",
+KNOWN_TOOLS = {"search_knowledge", "add_to_knowledge", "web_search", "fetch_url", "read_memory", "add_memory", "ask_user",
                "create_docx", "create_xlsx", "create_pptx"}
 
 

@@ -12,7 +12,7 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env      # then add your API key
 ```
-Choose the model in `config/agent.toml`:
+Choose the model, and every other setting, in `config/agent.toml` (documented in [config/README.md](config/README.md)):
 - `provider = "anthropic"` (default): Claude API, needs `ANTHROPIC_API_KEY`.
 - `provider = "openai"`: any OpenAI-compatible API (OpenAI, OpenRouter, or a local model via Ollama with `base_url = "http://localhost:11434/v1"`), needs `OPENAI_API_KEY` (any value for Ollama).
 
@@ -93,8 +93,9 @@ The repo is the plan: if a decision is not in one of these files, it was not mad
 | [spec.md](spec.md) | Who uses it, what it must do, what is not in v1, how fast, what data, which limits (with numbers), and the 12 checks that define "done" |
 | [architecture.md](architecture.md) | Components, flows, storage, model, limits, where each piece would run, secrets, and every decision with its reason |
 | [practice.md](practice.md) | The eight steps every ticket goes through, branch and pull-request rules, and the three numbers each PR carries |
+| [config/README.md](config/README.md) | Every setting in one table: the model and its effort, limits, timeouts, search-index sizes, eval thresholds. Secrets stay in `.env` |
 | `tests/` | Code tests, the model mocked: same input, same output. `pytest -m "not e2e"` |
-| `evals/` | Agent evals: 30 cases, an exact grader, and a history of scores. `python -m evals.run` (real model, costs tokens) |
+| `evals/` | Agent evals: 31 cases, an exact grader, and a history of scores. `python -m evals.run` (real model, costs tokens) |
 | `.github/workflows/ci.yml` | The gate: tests, secret scan, evals when the prompt, tools or model change. No deploy step |
 | [GitHub Project](https://github.com/RMcowork/lesson-prep-agent/issues) | One card per ticket, milestones v1 to v3, bugs as issues |
 

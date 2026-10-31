@@ -73,7 +73,7 @@ def test_a_server_outage_is_reported_without_details(monkeypatch, smtp, files):
 
 
 def test_total_attachment_size_is_capped_and_skipped_files_are_reported(smtp, tmp_path):
-    big = tmp_path / "big.pdf"; big.write_bytes(b"0" * (emailer.MAX_TOTAL_BYTES + 1))
+    big = tmp_path / "big.pdf"; big.write_bytes(b"0" * (emailer.max_total_bytes() + 1))
     small = tmp_path / "small.docx"; small.write_bytes(b"ok")
     result = emailer.send_files("t@example.com", "s", "b", [small, big])
     assert "Sent 1 file" in result and "big.pdf" in result

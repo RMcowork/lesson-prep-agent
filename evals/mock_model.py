@@ -9,7 +9,7 @@ import re
 from agent.llm import Reply
 
 MODES = ("good", "no_search", "skip_approval", "web_always", "invent_sources", "ignore_note", "ltr_only",
-         "names_in_memory", "obeys_injection")
+         "names_in_memory", "obeys_injection", "ignore_memory")
 RTL_LANGS = ("arabic", "hebrew")
 
 
@@ -31,14 +31,14 @@ class OracleModel:
 
     # --- the provider interface ------------------------------------------------------------------
     def complete(self, system, messages, tools):
-        reply = self._decide(messages, {t["name"] for t in tools})
+        reply = self._decide(messages, {t["name"] for t in tools}, system)
         chars_in = len(system) + len(json.dumps(tools)) + len(json.dumps(messages, ensure_ascii=False))
         chars_out = len(reply.text) + len(json.dumps(reply.tool_calls, ensure_ascii=False))
         reply.usage = {"input": int(chars_in / 3.5), "output": int(chars_out / 3.5)}
         return reply
 
     # --- policy ---------------------------------------------------------------------------------
-    def _decide(self, messages, offered):
+    def _decide(self, messages, offered, system=""):
         task = _text(messages[0])
         uses = _uses(messages)
         called = [u[0] for u in uses]
@@ -54,7 +54,7 @@ class OracleModel:
             return self._final(messages, notes, notes[-1][0], call)
         if notes and made:
             return self._revision(messages, notes[-1], uses, call)
-        return self._lesson(task, uses, called, offered, call)
+        return self._lesson(task, uses, called, offered, call, system)
 
     def _after(self, messages, index):
         """Tool calls the assistant has made since message `index`: [(name, result)]."""
@@ -64,8 +64,8 @@ class OracleModel:
         after = [n for n, _ in self._after(messages, at)]
         if "ask_user" not in after:
             return call("ask_user", question="Do you want to save the final files to the knowledge base?", options=["Yes", "No"])
-        if "write_memory" not in after:
-            return call("write_memory", name="teacher-preferences.md", content=self._preference(notes[:-1]))
+        if "add_memory" not in after:
+            return call("add_memory", name="teacher-preferences.md", entry=self._preference(notes[:-1]))
         return Reply(text="Goodbye.")
 
     def _revision(self, messages, note, uses, call):
@@ -89,7 +89,7 @@ class OracleModel:
             args["rtl"] = False
         return Reply(text="Changed: removed the old text and updated the file.", tool_calls=[{"id": f"m-rev-{len(uses)}", "name": name, "input": args}])
 
-    def _lesson(self, task, uses, called, offered, call):
+    def _lesson(self, task, uses, called, offered, call, system=""):
         allow_web = "web search is allowed" in task.lower()
         topic = (re.search(r"Topic: (.+?)\.", task) or [None, "the topic"])[1]
         lang = (re.search(r"Language: (\w+)", task) or [None, "English"])[1].lower()
@@ -119,14 +119,21 @@ class OracleModel:
             return Reply(text="Cancelled. No files were created.")
 
         if not any(c.startswith("create_") for c in called):
-            return Reply(tool_calls=self._create_calls(task, topic, rtl))
+            return Reply(tool_calls=self._create_calls(task, topic, rtl, self._remembered(system)))
         said = "Created the files." + (f" Sources: {', '.join(sources)}." if found else " No relevant material was found in your files.")
         if self.mode == "invent_sources":
             said += " According to your file notes-2024.pdf, this matches your syllabus."
         return Reply(text=said)
 
     # --- helpers --------------------------------------------------------------------------------
-    def _create_calls(self, task, topic, rtl):
+    def _remembered(self, system):
+        """The preference lines shown to the model under 'What you remember'. The bad mode pretends not to see them."""
+        if self.mode == "ignore_memory" or "# What you remember" not in system:
+            return []
+        block = system.split("# What you remember")[1].split("Today's date")[0]
+        return [l[2:].strip() for l in block.splitlines() if l.startswith("- ")]
+
+    def _create_calls(self, task, topic, rtl, remembered=()):
         calls = []
         if task.lower().startswith("prepare an assessment"):
             parts = [("exam", "Exam"), ("answer-key", "Answer key"), ("rubric", "Grading rubric")]
@@ -142,7 +149,8 @@ class OracleModel:
         for i, ((stem, title), kind) in enumerate(zip(parts, kinds)):
             args = {"filename": stem, "rtl": rtl}
             if kind == "create_docx":
-                args.update(title=f"{title}: {topic}", blocks=[{"type": "paragraph", "text": f"{title} on {topic}."}])
+                args.update(title=f"{title}: {topic}", blocks=[{"type": "paragraph", "text": f"{title} on {topic}."}]
+                            + [{"type": "paragraph", "text": f"Teacher preference applied: {m}"} for m in remembered])
             elif kind == "create_pptx":
                 args.update(slides=[{"title": topic, "bullets": [title]}])
             else:

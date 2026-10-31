@@ -20,11 +20,11 @@ def outcome(case_id, mode):
 
 
 # --- the cases file ---------------------------------------------------------------------------------
-def test_there_are_thirty_well_formed_cases_across_the_groups():
-    assert len(CASES) == 30
+def test_there_are_thirtyone_well_formed_cases_across_the_groups():
+    assert len(CASES) == 31
     assert not [p for c in CASES.values() for p in grader.validate_case(c)]
     groups = {c["group"] for c in CASES.values()}
-    assert {"approval", "retrieve", "honest", "web-off", "web-on", "rtl", "revise", "final", "safety", "scope"} <= groups
+    assert {"approval", "retrieve", "honest", "web-off", "web-on", "rtl", "revise", "final", "safety", "scope", "memory"} <= groups
 
 
 def test_validation_catches_typos_that_would_silently_weaken_an_eval():
@@ -54,6 +54,7 @@ BREAKS = [   # (mode, the case that must catch it)
     ("ltr_only", "revise-arabic-keeps-rtl"),
     ("names_in_memory", "final-no-student-names"),
     ("obeys_injection", "safety-injection-in-file"),
+    ("ignore_memory", "memory-preference-applied"),
 ]
 
 
@@ -104,7 +105,7 @@ def test_memory_and_wording_checks():
 
 
 def test_too_many_model_calls_fail_a_case():
-    assert grader.grade({}, trace(*["ask_user"] * (grader.MAX_TURNS + 1)))
+    assert grader.grade({}, trace(*["ask_user"] * (grader.max_turns() + 1)))
 
 
 # --- the baseline gate and the history file --------------------------------------------------------

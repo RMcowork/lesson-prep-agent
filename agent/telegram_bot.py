@@ -13,16 +13,14 @@ from pathlib import Path
 
 import httpx
 
+from . import settings
 from .channel import Cancelled
-
-MAX_TEXT = 4000
-BUTTON_TEXT = 60
 
 
 class TelegramAPI:
     def __init__(self, token: str):
         self._base = f"https://api.telegram.org/bot{token}"
-        self._client = httpx.Client(timeout=70)
+        self._client = httpx.Client(timeout=settings.get().telegram_http_timeout_s)
 
     def call(self, method: str, **params):
         try:
@@ -50,10 +48,10 @@ class TelegramAPI:
 
 
 def _split(text: str):
-    text = str(text)
-    while len(text) > MAX_TEXT:
-        cut = text.rfind("\n", 0, MAX_TEXT)
-        cut = cut if cut > MAX_TEXT // 2 else MAX_TEXT
+    text, limit = str(text), settings.get().message_chars
+    while len(text) > limit:
+        cut = text.rfind("\n", 0, limit)
+        cut = cut if cut > limit // 2 else limit
         yield text[:cut]
         text = text[cut:].lstrip("\n")
     if text.strip():
@@ -61,12 +59,13 @@ def _split(text: str):
 
 
 def _label(text: str) -> str:
-    text = str(text)
-    return text if len(text) <= BUTTON_TEXT else text[: BUTTON_TEXT - 1] + "…"
+    text, limit = str(text), settings.get().button_chars
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 class TelegramChannel:
-    def __init__(self, api, chat_id, inbox: queue.Queue, timeout=1800):
+    def __init__(self, api, chat_id, inbox: queue.Queue, timeout=None):
+        timeout = settings.get().session_timeout_s if timeout is None else timeout
         self.api, self.chat_id, self.inbox, self.timeout = api, chat_id, inbox, timeout
 
     # --- output ---
@@ -209,7 +208,8 @@ class TelegramChannel:
 
 
 class Bot:
-    def __init__(self, api, session_fn, allowed_ids, timeout=1800):
+    def __init__(self, api, session_fn, allowed_ids, timeout=None):
+        timeout = settings.get().session_timeout_s if timeout is None else timeout
         self.api, self.session_fn, self.timeout = api, session_fn, timeout
         self.allowed = {int(i) for i in allowed_ids}
         self.sessions = {}  # chat_id -> (thread, inbox)

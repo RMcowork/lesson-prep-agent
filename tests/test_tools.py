@@ -4,14 +4,14 @@ import socket
 
 import pytest
 
-from agent import tools
+from agent import memory, tools
 from agent.tools import TOOLS, ToolRunner
 from tests.helpers import ScriptedChannel
 
 
 @pytest.fixture
 def runner(tmp_path, monkeypatch):
-    monkeypatch.setattr(tools, "MEMORY_DIR", tmp_path / "memory")
+    monkeypatch.setattr(memory, "MEMORY_DIR", tmp_path / "memory")
     return ToolRunner(tmp_path / "out", ScriptedChannel())
 
 
@@ -82,20 +82,22 @@ def test_web_search_falls_back_and_then_degrades_gracefully(runner, monkeypatch)
     assert "No web results" in runner.run("web_search", {"query": "q"})
 
 
-# --- memory -----------------------------------------------------------------------------------------
-def test_memory_round_trip_and_only_three_files(runner):
+# --- memory (the safe operations are tested in tests/test_memory.py) --------------------------------
+def test_the_model_can_add_to_memory_but_not_replace_a_file(runner):
+    names = {t["name"] for t in runner.tools}
+    assert "add_memory" in names and "read_memory" in names
+    assert not {n for n in names if "write_memory" in n or "rewrite" in n or "replace" in n}
+    with pytest.raises(ValueError, match="Unknown tool"):
+        runner.run("write_memory", {"name": "lesson-log.md", "content": "everything"})
+
+
+def test_memory_round_trip_through_the_tools_and_only_three_files(runner):
     assert runner.run("read_memory", {"name": "lesson-log.md"}) == "(empty)"
-    runner.run("write_memory", {"name": "lesson-log.md", "content": "row"})
-    assert runner.run("read_memory", {"name": "lesson-log.md"}) == "row"
-    for bad in ("secrets.md", "INDEX.md", "../../etc/passwd"):
+    runner.run("add_memory", {"name": "teacher-preferences.md", "entry": "prefers short warm-ups"})
+    assert "- prefers short warm-ups" in runner.run("read_memory", {"name": "teacher-preferences.md"})
+    for bad in ("secrets.md", "INDEX.md"):
         with pytest.raises(ValueError):
-            runner.run("write_memory", {"name": bad, "content": "x"})
-
-
-def test_memory_path_traversal_cannot_leave_the_memory_folder(runner, tmp_path):
-    with pytest.raises(ValueError):
-        runner.run("read_memory", {"name": "../outside.md"})
-    assert not (tmp_path / "outside.md").exists()
+            runner.run("add_memory", {"name": bad, "entry": "x"})
 
 
 # --- files and versions (spec check 4) --------------------------------------------------------------
@@ -147,6 +149,41 @@ def test_add_to_knowledge_refuses_files_outside_the_job_folder(runner, kb, tmp_p
     with pytest.raises(ValueError):
         runner.run("add_to_knowledge", {"filenames": ["../secret.txt"]})
     assert not any((kb.KNOWLEDGE / "generated").rglob("secret.txt")) if (kb.KNOWLEDGE / "generated").exists() else True
+
+
+def test_add_to_knowledge_never_overwrites(runner, kb):
+    """Ticket #40: a second save with the same file name used to replace the first one, with no backup."""
+    import docx as d
+
+    saved = kb.KNOWLEDGE / "generated" / runner.out_dir.name
+    docx(runner, "first version")
+    runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    docx(runner, "second version")                                           # the teacher asked for a change, then saves again
+    msg = runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    assert "plan.docx as plan-v2.docx" in msg
+    assert d.Document(saved / "plan.docx").paragraphs[1].text == "first version"        # the first save is untouched
+    assert d.Document(saved / "plan-v2.docx").paragraphs[1].text == "second version"
+    docx(runner, "third version")
+    assert "plan.docx as plan-v3.docx" in runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    assert sorted(p.name for p in saved.iterdir()) == ["plan-v2.docx", "plan-v3.docx", "plan.docx"]
+
+
+def test_saving_identical_content_again_does_nothing_and_says_so(runner, kb):
+    saved = kb.KNOWLEDGE / "generated" / runner.out_dir.name
+    docx(runner, "same")
+    runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    msg = runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    assert "Already saved, identical: plan.docx" in msg and "Saved plan" not in msg
+    assert sorted(p.name for p in saved.iterdir()) == ["plan.docx"]
+
+
+def test_a_save_of_several_files_reports_each_one(runner, kb):
+    runner.run("create_xlsx", {"filename": "task", "sheets": [{"name": "S", "rows": [["a"]]}]})
+    docx(runner, "v1")
+    runner.run("add_to_knowledge", {"filenames": ["plan.docx"]})
+    docx(runner, "v2")
+    msg = runner.run("add_to_knowledge", {"filenames": ["plan.docx", "task.xlsx"]})
+    assert "Saved plan.docx as plan-v2.docx, task.xlsx" in msg
 
 
 # --- asking the teacher -----------------------------------------------------------------------------

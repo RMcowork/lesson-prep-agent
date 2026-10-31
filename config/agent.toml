@@ -1,16 +1,49 @@
-# Which LLM the standalone agent uses.
-#
-# provider = "anthropic"  -> Claude API. Needs ANTHROPIC_API_KEY in .env
-# provider = "openai"     -> any OpenAI-compatible API (OpenAI, OpenRouter, Ollama, LM Studio...).
-#                            Needs OPENAI_API_KEY in .env (use any value for Ollama) and base_url.
-#
-# Examples for a local model:
-#   provider = "openai"
-#   model = "qwen2.5:14b"
-#   base_url = "http://localhost:11434/v1"
+# Every tunable value of the agent lives in this one file. Defaults are defined once, in agent/settings.py.
+# What each setting means and where it is used: config/README.md.
+# Secrets (API keys, tokens, passwords) are NOT here: they stay in .env (see .env.example).
 
+# --- which model ---------------------------------------------------------------------------------
+# provider = "anthropic" needs ANTHROPIC_API_KEY. provider = "openai" is any OpenAI-compatible API
+# (OpenAI, OpenRouter, Ollama, LM Studio) and needs OPENAI_API_KEY (any value for Ollama) and base_url.
+# Local model example:  provider = "openai"   model = "qwen2.5:14b"   base_url = "http://localhost:11434/v1"
 provider = "anthropic"
 model = "claude-sonnet-5-5"
 base_url = ""
-max_tokens = 8000
-max_turns = 40
+max_tokens = 8000          # most the model may write in one reply
+effort = "high"            # how hard Claude thinks: low, medium, high, xhigh, max. Empty = the model's own default.
+                           # "high" is what claude-sonnet-5-5 uses anyway; claude-opus-5-5 would default to medium,
+                           # so it is set explicitly. Lower it only after the evals show quality holds (ticket #17).
+max_turns = 40             # most model calls in one turn of work
+
+# --- memory ----------------------------------------------------------------------------------
+memory_entry_chars = 600   # longest single line the agent may remember (it is asked to shorten longer ones)
+memory_context_chars = 4000  # most characters of preferences, and of class notes, shown to the model before it plans (newest kept)
+
+# --- web tools (only when the teacher allows web search) ---------------------------------------------
+web_results = 6                    # results returned by one search
+web_search_timeout_s = 10          # first attempt (DuckDuckGo directly)
+web_search_fallback_timeout_s = 20 # second attempt (automatic engines)
+web_fetch_timeout_s = 20           # fetching one page
+web_fetch_chars = 8000             # characters of a page given to the model
+
+# --- email ---------------------------------------------------------------------------------------
+email_max_mb = 20          # total attachments per email (mailboxes usually stop at 25)
+smtp_timeout_s = 60
+
+# --- telegram ------------------------------------------------------------------------------------
+session_timeout_s = 1800   # a chat session ends after this much silence
+message_chars = 4000       # long messages are split below Telegram's 4096 limit
+button_chars = 60          # button labels are shortened to this
+telegram_http_timeout_s = 70   # must be longer than the 30 s long poll
+
+# --- search index (RAG) --------------------------------------------------------------------------
+embedding_model = "intfloat/multilingual-e5-large"
+chunk_words = 250
+overlap_words = 40
+embed_batch_size = 16      # small batches keep memory bounded
+embed_threads = 0          # 0 = half the cores. The RAG_THREADS variable overrides it on a host.
+
+# --- evals ---------------------------------------------------------------------------------------
+eval_max_turns = 15                # a case that needs more model calls fails
+eval_pass_drop_allowed = 0.05      # a pass rate this much below the baseline is a regression
+eval_token_rise_allowed = 0.5      # input tokens this much above the baseline is a regression

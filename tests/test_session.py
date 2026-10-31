@@ -7,9 +7,10 @@ import docx
 import pytest
 
 import agent.__main__ as app
+from agent.settings import Settings
 from tests.helpers import FakeProvider, ScriptedChannel, call, docx_call, reply
 
-CFG = {"max_turns": 10}
+CFG = Settings(max_turns=10)
 
 
 @pytest.fixture(autouse=True)
@@ -23,7 +24,7 @@ def session_script():
         reply("", docx_call("plan", text="version 1")), reply("Created the plan."),                      # first turn
         reply("", docx_call("plan", text="version 2 shorter warm-up")), reply("Changed the warm-up."),   # revision
         reply("", call("ask_user", question="Save to the knowledge base?", options=["Yes", "No"])),      # final phase
-        reply("", call("write_memory", name="teacher-preferences.md", content="- prefers short warm-ups")),
+        reply("", call("add_memory", name="teacher-preferences.md", entry="prefers short warm-ups")),
         reply("Goodbye."),
     ]
 
@@ -100,9 +101,43 @@ def test_web_off_is_enforced_for_the_whole_session(data_dir):
     assert all("web_search" not in c["tools"] and "fetch_url" not in c["tools"] for c in p.calls)
 
 
-@pytest.mark.xfail(strict=True, reason="bug #29: same-day, same-topic sessions share one folder and one log")
-def test_two_sessions_on_the_same_topic_get_different_folders(data_dir):
-    for _ in range(2):
-        script = [reply("", docx_call()), reply("done"), reply("", call("ask_user", question="?", options=["a"])), reply("bye")]
-        run(data_dir, ScriptedChannel(["back", 0]), FakeProvider(script))
-    assert len(list((data_dir / "output").iterdir())) == 2
+def one_session(data_dir, label):
+    script = [reply("", docx_call("plan", text=label)), reply("done"),
+              reply("", call("ask_user", question="Save?", options=["Yes", "No"])), reply("bye")]
+    run(data_dir, ScriptedChannel(["back", 1]), FakeProvider(script))
+
+
+def test_two_sessions_on_the_same_topic_get_their_own_folders_and_logs(data_dir):
+    """Bug #29: the second session used to overwrite the first one's log and share its folder."""
+    one_session(data_dir, "FIRST session content")
+    one_session(data_dir, "SECOND session content")
+    one_session(data_dir, "THIRD session content")
+    folders = sorted(p.name for p in (data_dir / "output").iterdir())
+    assert len(folders) == 3 and folders[0].endswith("revision-test") and folders[1].endswith("revision-test-2") and folders[2].endswith("revision-test-3")
+    logs = sorted(p.name for p in (data_dir / "logs").glob("*.json") if "usage" not in p.name)
+    assert set(logs) == {f + ".json" for f in folders} and len(logs) == 3            # exactly one log per session
+    for folder, label in zip(folders, ("FIRST", "SECOND", "THIRD")):
+        assert f"{label} session content" in (data_dir / "logs" / f"{folder}.json").read_text()   # no log was overwritten
+        import docx as d
+        assert d.Document(data_dir / "output" / folder / "plan.docx").paragraphs[1].text == f"{label} session content"
+        assert not (data_dir / "output" / folder / "previous-versions").exists()    # each session started clean
+    assert len(list((data_dir / "logs").glob("*.usage.json"))) == 3
+
+
+def test_a_revision_inside_one_session_stays_in_that_sessions_folder(data_dir):
+    run(data_dir, ScriptedChannel([0, "make it shorter", "back", 1]))
+    assert len(list((data_dir / "output").iterdir())) == 1                           # one session, one folder, however many revisions
+
+
+def test_a_leftover_log_alone_is_enough_to_make_a_name_unavailable(data_dir):
+    import agent.__main__ as app
+
+    (data_dir / "output" / "2026-10-31-x").mkdir(parents=True)
+    (data_dir / "logs").mkdir()
+    (data_dir / "logs" / "2026-10-31-x-2.json").write_text("[]")              # a log whose folder was deleted
+    assert app.unique_folder("2026-10-31-x") == "2026-10-31-x-3"
+    assert app.unique_folder("2026-10-31-y") == "2026-10-31-y"                # an unused name is kept as it is
+
+
+def test_numbered_folder_names_still_sort_by_date():
+    assert sorted(["2026-10-31-x-2", "2026-10-30-x", "2026-10-31-x"]) == ["2026-10-30-x", "2026-10-31-x", "2026-10-31-x-2"]

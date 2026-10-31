@@ -7,11 +7,12 @@ import pytest
 
 import agent.__main__ as app
 from agent.telegram_bot import Bot
+from agent.settings import Settings
 from agent.topics import TopicStore
 from tests.helpers import FakeProvider, FakeTelegramAPI, ScriptedChannel, call, docx_call, reply, run_bot_until_done
 
 pytestmark = pytest.mark.e2e
-CFG = {"max_turns": 10}
+CFG = Settings(max_turns=10)
 
 
 def lesson_script():
@@ -20,7 +21,7 @@ def lesson_script():
         reply("", docx_call("lesson-plan", title="خطة الدرس", text="أنواع البيانات", rtl=True)),
         reply("Created the lesson plan."),
         reply("", call("ask_user", question="Save to the knowledge base?", options=["Yes", "No"])),
-        reply("", call("write_memory", name="lesson-log.md", content="| 2026 | Data types | Arabic |")),
+        reply("", call("add_memory", name="lesson-log.md", entry="| 2026-10-31 | Data types | Arabic | lesson-plan.docx | none yet |")),
         reply("Goodbye."),
     ]
 

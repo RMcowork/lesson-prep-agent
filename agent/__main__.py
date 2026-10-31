@@ -10,11 +10,10 @@ import json
 import os
 import re
 import threading
-import tomllib
 from datetime import date
 from pathlib import Path
 
-from . import emailer, menu
+from . import emailer, memory, menu, settings
 from .topics import TopicStore
 from .usage import Meter
 from .channel import TerminalChannel
@@ -45,7 +44,8 @@ def build_system() -> str:
             read(ROOT / "config" / "system-prompt.md"),
             "# Teacher profile\n" + read(ROOT / "config" / "teacher-profile.md"),
             "# Course outline\n" + read(ROOT / "config" / "course-outline.md"),
-            "# Memory index\n" + read(DATA / "memory" / "INDEX.md"),
+            memory.index(),
+            "# What you remember about this teacher (apply it without being asked)\n" + memory.context(),
             f"Today's date: {date.today().isoformat()}",
         ]
     )
@@ -55,22 +55,32 @@ def slug(text: str) -> str:
     return re.sub(r"[^\w]+", "-", text.strip().lower(), flags=re.UNICODE).strip("-")[:40] or "session"
 
 
+def unique_folder(stem: str) -> str:
+    """date-topic, then date-topic-2, date-topic-3 ... so a new session never overwrites an earlier one's files or log.
+    Names still sort by date."""
+    name, n = stem, 1
+    while (DATA / "output" / name).exists() or (DATA / "logs" / f"{name}.json").exists():
+        n += 1
+        name = f"{stem}-{n}"
+    return name
+
+
 FINAL_PHASE = (
     "The teacher is satisfied with the files. Now finish up: ask the teacher with ask_user whether "
     "to save the final files to the knowledge base (call add_to_knowledge if yes), then update memory "
-    "with write_memory: add the lesson to the lesson log, and save any preferences or corrections the "
-    "teacher asked for during this session. Then say a one-line goodbye."
+    "with add_memory: add one row for this lesson to the lesson log, and one line for each preference or "
+    "correction the teacher asked for during this session. Then say a one-line goodbye."
 )
 
 
 def run_session(provider, cfg, task: str, name: str, ch, lock=None, allow_web: bool = True):
     """One working session: generate, then keep taking the teacher's notes until they are happy."""
-    folder = f"{date.today().isoformat()}-{slug(name)}"
+    folder = unique_folder(f"{date.today().isoformat()}-{slug(name)}")
     out_dir = DATA / "output" / folder
     out_dir.mkdir(parents=True, exist_ok=True)
     log_path = DATA / "logs" / f"{folder}.json"
     runner = ToolRunner(out_dir, ch, allow_web)
-    system, max_turns = build_system(), int(cfg.get("max_turns", 40))
+    system, max_turns = build_system(), cfg.max_turns
     state = {"messages": None}
     meter = Meter()
     delivered = {}
@@ -240,7 +250,8 @@ def main():
         print(core.reindex())
         return
 
-    cfg = tomllib.loads((ROOT / "config" / "agent.toml").read_text())
+    cfg = settings.load()
+    settings.use(cfg)
     ch = TerminalChannel()
 
     if args.cmd in (None, "menu"):

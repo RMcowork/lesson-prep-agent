@@ -5,7 +5,7 @@ and a grader. Run it before and after every change to the prompt, the tools or t
 
 | File | What it is |
 |---|---|
-| `cases.yaml` | 30 cases in 10 groups: approval, retrieve, honest, web-off, web-on, rtl, revise, final, safety, scope. Grow it every time the agent surprises you. |
+| `cases.yaml` | 31 cases in 11 groups: approval, retrieve, honest, web-off, web-on, rtl, revise, final, safety, scope, memory. Grow it every time the agent surprises you. |
 | `grader.py` | Exact checks on tool calls and fields: which tool, in what order, with which arguments, what was said, what was remembered |
 | `run.py` | Runs the cases with stubbed tools and a scripted teacher, grades them, appends to `history.csv`, compares with the baseline |
 | `history.csv` | One row per recorded run: pass rate and tokens. The row marked `baseline` is what a change is measured against |

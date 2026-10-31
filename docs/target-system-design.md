@@ -112,7 +112,7 @@ flowchart TB
         Q["Job queue<br/>lock now, Redis later"]
         WORK["Agent worker"]
         LLM["LLM provider<br/>Claude API or OpenAI-compatible"]
-        TOOLS["Tools<br/>search_knowledge, add_to_knowledge<br/>web_search, fetch_url (off by default)<br/>read_memory, write_memory<br/>create_docx, xlsx, pptx<br/>ask_user (numbered options)"]
+        TOOLS["Tools<br/>search_knowledge, add_to_knowledge<br/>web_search, fetch_url (off by default)<br/>read_memory, add_memory<br/>create_docx, xlsx, pptx<br/>ask_user (numbered options)"]
         API --> Q --> WORK
         WORK <--> LLM
         WORK <--> TOOLS

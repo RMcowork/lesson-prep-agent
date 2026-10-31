@@ -15,7 +15,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import tomllib
 from datetime import date
 from pathlib import Path
 
@@ -25,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import agent.__main__ as app  # noqa: E402
+from agent import settings  # noqa: E402
 from agent.loop import run_agent  # noqa: E402
 from agent.tools import ToolRunner  # noqa: E402
 from agent.usage import Meter  # noqa: E402
@@ -34,8 +34,6 @@ CASES = ROOT / "evals" / "cases.yaml"
 HISTORY = ROOT / "evals" / "history.csv"
 COLUMNS = ["date", "git_sha", "provider", "model", "cases", "runs_per_case", "runs_passed", "runs_total", "pass_rate",
            "tokens_in", "tokens_out", "baseline", "note"]
-PASS_DROP_ALLOWED = 0.05
-TOKEN_RISE_ALLOWED = 0.50
 
 
 class EvalChannel:
@@ -128,8 +126,11 @@ def run_case(case, provider, workdir):
     channel = EvalChannel(case.get("teacher", []))
     runner = StubRunner(out_dir, channel, case)
     app.DATA = Path(workdir)
-    import agent.tools as tools_module
-    tools_module.MEMORY_DIR = Path(workdir) / "memory"
+    from agent import memory
+    memory.MEMORY_DIR = Path(workdir) / "memory"
+    for fname, text in (case.get("memory") or {}).items():          # what the agent already remembers in this case
+        memory.MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+        (memory.MEMORY_DIR / fname).write_text(text, encoding="utf-8")
     system = app.build_system()
     phase = case.get("phase", "lesson")
     meter, messages, task = Meter(), None, case["task"]
@@ -137,7 +138,7 @@ def run_case(case, provider, workdir):
         messages = seed_conversation(case, runner)
         task = case["note"] if phase == "revise" else app.FINAL_PHASE
     try:
-        out = run_agent(provider, system, task, runner, max_turns=grader.MAX_TURNS + 1, interactive=False, messages=messages, meter=meter)
+        out = run_agent(provider, system, task, runner, max_turns=grader.max_turns() + 1, interactive=False, messages=messages, meter=meter)
     except Exception as exc:                                              # a provider failure is a failed run, not a crash
         return {"passed": False, "fails": [f"the run crashed: {type(exc).__name__}: {str(exc)[:120]}"], "tokens": {"input": meter.input_tokens, "output": meter.output_tokens}, "calls": meter.calls}
 
@@ -148,7 +149,7 @@ def run_case(case, provider, workdir):
     trace.said = "\n".join(texts + [a["question"] for a in channel.asks])
     trace.files = [p.name for p in out_dir.glob("*") if p.is_file()]
     mem = Path(workdir) / "memory"
-    trace.memory = "\n".join(c["input"].get("content", "") for c in runner.log if c["name"] == "write_memory" and not c["error"])
+    trace.memory = "\n".join(c["input"].get("entry", "") for c in runner.log if c["name"] == "add_memory" and not c["error"])
     fails = grader.grade(case["expect"], trace)
     return {"passed": not fails, "fails": fails, "tokens": {"input": meter.input_tokens, "output": meter.output_tokens}, "calls": meter.calls}
 
@@ -183,15 +184,16 @@ def compare(result, base):
     """Returns (ok, messages) against the baseline row."""
     if base is None:
         return True, ["no baseline yet: run with --baseline once the prompt is in a state you trust (ticket #17)"]
+    s = settings.get()
     msgs, ok = [], True
     base_rate = float(base["pass_rate"])
-    if result["pass_rate"] < base_rate - PASS_DROP_ALLOWED:
+    if result["pass_rate"] < base_rate - s.eval_pass_drop_allowed:
         ok = False
         msgs.append(f"pass rate fell: {result['pass_rate']:.1%} against a baseline of {base_rate:.1%}")
     base_tokens = int(base["tokens_in"])
-    if base_tokens and result["tokens_in"] > base_tokens * (1 + TOKEN_RISE_ALLOWED):
+    if base_tokens and result["tokens_in"] > base_tokens * (1 + s.eval_token_rise_allowed):
         ok = False
-        msgs.append(f"input tokens rose from {base_tokens} to {result['tokens_in']} (more than {TOKEN_RISE_ALLOWED:.0%})")
+        msgs.append(f"input tokens rose from {base_tokens} to {result['tokens_in']} (more than {s.eval_token_rise_allowed:.0%})")
     return ok, msgs or ["within the baseline"]
 
 
@@ -229,8 +231,9 @@ def main(argv=None):
     else:
         os.environ.setdefault("AGENT_DATA_DIR", tempfile.mkdtemp(prefix="evals-"))
         app.load_env()
-        cfg = tomllib.loads((ROOT / "config" / "agent.toml").read_text())
-        provider, label = app.make_provider(cfg), (cfg.get("provider", "anthropic"), cfg.get("model", "?"))
+        cfg = settings.load()
+        settings.use(cfg)
+        provider, label = app.make_provider(cfg), (cfg.provider, cfg.model)
 
     per_case, totals = {}, {"input": 0, "output": 0}
     passed_runs = total_runs = 0

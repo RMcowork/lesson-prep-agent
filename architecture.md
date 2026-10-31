@@ -23,7 +23,7 @@ flowchart LR
         direction TB
         R1["READ search_knowledge<br/>read_memory, ask_user"]
         R2["READ web_search, fetch_url<br/>off unless the teacher allows"]
-        W1["WRITE create_docx, create_xlsx, create_pptx<br/>add_to_knowledge, write_memory"]
+        W1["WRITE create_docx, create_xlsx, create_pptx<br/>add_to_knowledge, add_memory"]
     end
     subgraph L3["Layer 3: Storage, one volume"]
         FILES[("Files<br/>knowledge, output,<br/>memory, topics, logs")]
@@ -118,9 +118,9 @@ One volume, plain files, and a search index. No database yet.
 | Generated file | filename inside `output/<date>-<topic>/`; older versions `previous-versions/<name>-vN` | `output/` |
 | Memory entry | one of three file names | `memory/` |
 | Topic | name, unique ignoring case | `topics.json` |
-| Session log | `logs/<date>-<topic>.json` | `logs/` |
+| Session log | same name as its folder, `logs/<date>-<topic>[-N].json` | `logs/` |
 
-Known weakness: two sessions on the same topic on the same day share a folder and a log (#29).
+A session folder is `<date>-<topic>`; a second session on the same topic and day becomes `<date>-<topic>-2`, then `-3`, so no session ever overwrites another's files or log (#29).
 
 ## Model
 
@@ -129,10 +129,12 @@ Known weakness: two sessions on the same topic on the same day share a folder an
 | Provider | `anthropic` by default; any OpenAI-compatible endpoint is supported | Quality in Arabic and Hebrew; no lock-in |
 | Model | `claude-sonnet-5-5` (`config/agent.toml`) | One setting to change |
 | Max output | 8,000 tokens per call | Whole documents are written as tool arguments |
-| Effort | Not set (provider default) | Revisit with eval scores (#17) |
+| Effort | `high`, set explicitly in `config/agent.toml` | `high` is what `claude-sonnet-5-5` uses anyway; `claude-opus-5-5` would default to `medium`, so a model switch must not change it silently. Lower it only when the evals (#17) show quality holds |
 | Fixed context per call | System prompt about 1,800 tokens, 10 tool definitions about 1,100 tokens (measured) | Cacheable (#15) |
 | History | Whole conversation resent every call | Needed for revisions; capped later (#14) |
 | Embeddings | `multilingual-e5-large`, local, no per-use cost | Arabic, Hebrew, English retrieval; files stay on the machine |
+
+**Every value you can change** (model, limits, timeouts, chunk sizes, eval thresholds) is a setting in `config/agent.toml`, defined once in `agent/settings.py` and documented in [config/README.md](config/README.md). Secrets and paths are not settings: they stay in `.env` (see Secrets).
 
 **Measured per lesson** (3 real sessions, before the revision loop existed): about **10 model calls**, **14 to 18 tool calls**, **78,000 to 107,000 input tokens** (history resent each call), about **6,000 output tokens**. The cost is the model bill, not hosting. Dollar figures need the current price of the chosen model, set in `config/agent.toml` when #11 lands; they are not guessed here.
 
@@ -215,5 +217,7 @@ Date · choice · reason · what would change it.
 | 2026-10-31 | Tests mock the model; evals call the real model | Tests must be free, fast and identical every run; an agent is only "good enough" | Never |
 | 2026-10-31 | Evals use stubbed tools and scripted teacher answers | The environment is fixed, so a score change means the prompt or model changed | Real-tool evals are needed |
 | 2026-10-31 | $3 per day and 150,000 input tokens per job | Measured median 78,000 and maximum 107,000 per lesson | A month of real cost data |
+| 2026-10-31 | The model can only append one line to memory (`add_memory`); a full rewrite exists only as a human action | A whole-file write lost 2 of 3 notes in a test when the model did not read first, and rewrote the entire log at every finish; code must guarantee what a prompt can only ask | A teacher-facing memory menu needs edits (#37), which use `memory.rewrite` and keep the previous version |
+| 2026-10-31 | Preferences and class notes are put into the model's context by code at every session start (newest lines kept, 4,000 characters each) | In 2 of 2 real sessions the model read memory by itself, but nothing required it and no eval checked it; code can guarantee it | The lesson log or the notes grow so large that a summary is needed (#35), or memory moves to a database (#23) |
 | 2026-10-31 | Deployment is out of scope for this phase | The course plan covers design, placement, management and tests first | The deployment phase starts |
 | 2026-10-31 | `spec.md` and `architecture.md` in lower case at the root; old documents moved to `docs/` | Course convention; case-sensitive Linux CI; the Mac treats `SPEC.md` and `spec.md` as one file | Never |
