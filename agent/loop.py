@@ -22,6 +22,7 @@ def run_agent(
     interactive: bool = True,
     log_path=None,
     messages=None,
+    meter=None,
 ):
     """Run until the model finishes. Pass `messages` to continue an earlier conversation
     (for example to apply the teacher's requested changes).
@@ -40,6 +41,8 @@ def run_agent(
         messages.append({"role": "user", "content": [block]})
     for _ in range(max_turns):
         reply = provider.complete(system, messages, runner.tools)
+        if meter is not None:
+            meter.add(reply.usage)
         messages.append(reply.to_message())
         _save_log(log_path, messages)
         if reply.text:

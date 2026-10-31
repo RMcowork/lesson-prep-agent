@@ -1,4 +1,6 @@
-# SPEC: Lesson-Prep Agent
+# Implementation notes: Lesson-Prep Agent
+
+> This file was `SPEC.md`. The requirements now live in [../spec.md](../spec.md) and the decisions in [../architecture.md](../architecture.md); this file keeps the detailed notes on what is built.
 
 Status: APPROVED, implemented, and updated to match the code. Last updated 2026-10-17.
 
@@ -9,7 +11,7 @@ Course topics: data life cycle, data types, Excel functions, data visualization,
 
 ## 2. Two ways to run it
 - **Standalone (main):** `python -m agent` runs on its own and calls an LLM API you choose. It is operated from numbered terminal menus or from a Telegram bot.
-- **Inside Claude Code:** the slash commands `/lesson`, `/exam`, `/reindex` and the `rag` MCP server, following `CLAUDE.md`.
+- **Inside Claude Code:** the slash commands `/lesson`, `/exam`, `/reindex` and the `rag` MCP server, following [docs/claude-code-mode.md](claude-code-mode.md).
 
 Both share the same `config/`, `knowledge/`, `memory/`, the RAG code (`rag/core.py`) and the same workflow.
 
@@ -112,7 +114,7 @@ Memory is a set of small markdown files you can read and edit by hand.
 ## 10. Project layout
 ```
 AI-AGENT/
-  SPEC.md  README.md  CLAUDE.md      design, setup, Claude Code rules
+  spec.md  architecture.md  practice.md  CLAUDE.md   the plan; README.md  setup
   requirements.txt  Dockerfile  .env.example
   agent/
     __main__.py                      CLI, main menu, sessions

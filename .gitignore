@@ -18,3 +18,7 @@ __pycache__/
 .claude/settings.local.json
 logs/
 topics.json
+.pytest_cache/
+pytest.out
+report.xml
+

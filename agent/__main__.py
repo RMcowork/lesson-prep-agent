@@ -6,6 +6,7 @@
   python -m agent reindex
 """
 import argparse
+import json
 import os
 import re
 import threading
@@ -15,6 +16,7 @@ from pathlib import Path
 
 from . import emailer, menu
 from .topics import TopicStore
+from .usage import Meter
 from .channel import TerminalChannel
 from .llm import make_provider
 from .loop import run_agent
@@ -70,6 +72,7 @@ def run_session(provider, cfg, task: str, name: str, ch, lock=None, allow_web: b
     runner = ToolRunner(out_dir, ch, allow_web)
     system, max_turns = build_system(), int(cfg.get("max_turns", 40))
     state = {"messages": None}
+    meter = Meter()
     delivered = {}
 
     def turn(text):
@@ -81,7 +84,7 @@ def run_session(provider, cfg, task: str, name: str, ch, lock=None, allow_web: b
             ch.say("Working on it. This can take a few minutes.")
             state["messages"] = run_agent(
                 provider, system, text, runner, max_turns,
-                interactive=False, log_path=log_path, messages=state["messages"],
+                interactive=False, log_path=log_path, messages=state["messages"], meter=meter,
             )
         finally:
             if lock is not None:
@@ -114,8 +117,13 @@ def run_session(provider, cfg, task: str, name: str, ch, lock=None, allow_web: b
             deliver()
     turn(FINAL_PHASE)
     files = [p for p in sorted(out_dir.iterdir()) if p.is_file()]
+    try:  # token totals for this job, kept next to the log (spec.md §6)
+        (log_path.parent / f"{folder}.usage.json").write_text(json.dumps(meter.as_dict()))
+    except OSError:
+        pass
     if isinstance(ch, TerminalChannel):
-        ch.say(f"Session log: {log_path}")
+        ch.say(f"Session log: {log_path}. Model use: {meter.calls} calls, "
+               f"{meter.input_tokens} tokens in, {meter.output_tokens} out.")
     offer_email(ch, files, name)
 
 

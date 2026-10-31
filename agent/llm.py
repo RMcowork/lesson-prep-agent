@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 class Reply:
     text: str = ""
     tool_calls: list = field(default_factory=list)  # [{"id","name","input"}]
+    usage: dict = field(default_factory=dict)  # {"input": tokens, "output": tokens} for this call
 
     def to_message(self):
         blocks = []
@@ -47,7 +48,10 @@ class AnthropicProvider:
                 for t in tools
             ],
         )
-        reply = Reply()
+        reply = Reply(usage={
+            "input": getattr(resp.usage, "input_tokens", 0),
+            "output": getattr(resp.usage, "output_tokens", 0),
+        })
         for block in resp.content:
             if block.type == "text":
                 reply.text += block.text
@@ -109,7 +113,14 @@ class OpenAICompatProvider:
             tools=[{"type": "function", "function": t} for t in tools],
         )
         msg = resp.choices[0].message
-        reply = Reply(text=msg.content or "")
+        usage = getattr(resp, "usage", None)
+        reply = Reply(
+            text=msg.content or "",
+            usage={
+                "input": getattr(usage, "prompt_tokens", 0),
+                "output": getattr(usage, "completion_tokens", 0),
+            },
+        )
         for call in msg.tool_calls or []:
             try:
                 args = json.loads(call.function.arguments or "{}")
