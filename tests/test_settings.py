@@ -175,3 +175,18 @@ def test_the_eval_thresholds_come_from_the_settings():
     base = {"pass_rate": "0.9", "tokens_in": "100"}
     assert run.compare({"pass_rate": 0.5, "tokens_in": 250}, base)[0]            # within the looser limits
     assert not run.compare({"pass_rate": 0.3, "tokens_in": 250}, base)[0]
+
+
+@pytest.mark.parametrize("value", ["", "low", "medium", "high", "xhigh", "max"])
+def test_every_documented_effort_level_is_accepted(tmp_path, value):
+    assert settings.load(write(tmp_path, f'effort = "{value}"\n')).effort == value
+
+
+@pytest.mark.parametrize("value", ["HIGH", "extreme", "none", "5"])
+def test_an_unknown_effort_is_refused_naming_the_valid_ones(tmp_path, value):
+    with pytest.raises(SystemExit, match="effort must be one of"):
+        settings.load(write(tmp_path, f'effort = "{value}"\n'))
+
+
+def test_the_default_effort_is_explicitly_high():
+    assert Settings().effort == "high" and tomllib.loads((ROOT / "config" / "agent.toml").read_text())["effort"] == "high"

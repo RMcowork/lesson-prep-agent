@@ -129,7 +129,7 @@ Known weakness: two sessions on the same topic on the same day share a folder an
 | Provider | `anthropic` by default; any OpenAI-compatible endpoint is supported | Quality in Arabic and Hebrew; no lock-in |
 | Model | `claude-sonnet-5-5` (`config/agent.toml`) | One setting to change |
 | Max output | 8,000 tokens per call | Whole documents are written as tool arguments |
-| Effort | Not set (provider default) | Revisit with eval scores (#17) |
+| Effort | `high`, set explicitly in `config/agent.toml` | `high` is what `claude-sonnet-5-5` uses anyway; `claude-opus-5-5` would default to `medium`, so a model switch must not change it silently. Lower it only when the evals (#17) show quality holds |
 | Fixed context per call | System prompt about 1,800 tokens, 10 tool definitions about 1,100 tokens (measured) | Cacheable (#15) |
 | History | Whole conversation resent every call | Needed for revisions; capped later (#14) |
 | Embeddings | `multilingual-e5-large`, local, no per-use cost | Arabic, Hebrew, English retrieval; files stay on the machine |

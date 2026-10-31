@@ -27,7 +27,7 @@ class Reply:
 
 
 class AnthropicProvider:
-    def __init__(self, model, max_tokens, base_url=""):
+    def __init__(self, model, max_tokens, base_url="", effort=""):
         import anthropic
 
         if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -36,8 +36,10 @@ class AnthropicProvider:
         self.client = anthropic.Anthropic(**kwargs)
         self.model = model
         self.max_tokens = max_tokens
+        self.effort = effort
 
     def complete(self, system, messages, tools):
+        extra = {"output_config": {"effort": self.effort}} if self.effort else {}   # GA on the Messages API, no beta header
         resp = self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
@@ -47,6 +49,7 @@ class AnthropicProvider:
                 {"name": t["name"], "description": t["description"], "input_schema": t["parameters"]}
                 for t in tools
             ],
+            **extra,
         )
         reply = Reply(usage={
             "input": getattr(resp.usage, "input_tokens", 0),
@@ -63,7 +66,7 @@ class AnthropicProvider:
 
 
 class OpenAICompatProvider:
-    def __init__(self, model, max_tokens, base_url=""):
+    def __init__(self, model, max_tokens, base_url="", effort=""):   # effort is Claude-only and ignored here
         from openai import OpenAI
 
         key = os.environ.get("OPENAI_API_KEY")
@@ -133,7 +136,7 @@ class OpenAICompatProvider:
 def make_provider(cfg):
     """cfg is a Settings object (agent/settings.py)."""
     kind = cfg.provider
-    args = (cfg.model, cfg.max_tokens, cfg.base_url)
+    args = (cfg.model, cfg.max_tokens, cfg.base_url, cfg.effort)
     if kind == "anthropic":
         return AnthropicProvider(*args)
     if kind == "openai":

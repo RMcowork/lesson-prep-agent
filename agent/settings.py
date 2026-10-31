@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "agent.toml"
 PROVIDERS = ("anthropic", "openai")
+EFFORTS = ("", "low", "medium", "high", "xhigh", "max")   # "" = leave the provider default
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class Settings:
     model: str = "claude-sonnet-5-5"
     base_url: str = ""
     max_tokens: int = 8000
+    effort: str = "high"
     max_turns: int = 40
     # --- web tools ---
     web_results: int = 6
@@ -67,6 +69,8 @@ def _problems(values: dict) -> list:
     if not out:
         if values["provider"] not in PROVIDERS:
             out.append(f"provider must be one of {list(PROVIDERS)}, got {values['provider']!r}")
+        if values["effort"] not in EFFORTS:
+            out.append(f"effort must be one of {[e for e in EFFORTS if e]} or empty, got {values['effort']!r}")
         if not values["model"]:
             out.append("model must not be empty")
         if values["overlap_words"] >= values["chunk_words"]:

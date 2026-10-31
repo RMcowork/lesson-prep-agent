@@ -10,6 +10,9 @@ provider = "anthropic"
 model = "claude-sonnet-5-5"
 base_url = ""
 max_tokens = 8000          # most the model may write in one reply
+effort = "high"            # how hard Claude thinks: low, medium, high, xhigh, max. Empty = the model's own default.
+                           # "high" is what claude-sonnet-5-5 uses anyway; claude-opus-5-5 would default to medium,
+                           # so it is set explicitly. Lower it only after the evals show quality holds (ticket #17).
 max_turns = 40             # most model calls in one turn of work
 
 # --- web tools (only when the teacher allows web search) ---------------------------------------------
