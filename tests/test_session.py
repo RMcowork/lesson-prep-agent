@@ -24,7 +24,7 @@ def session_script():
         reply("", docx_call("plan", text="version 1")), reply("Created the plan."),                      # first turn
         reply("", docx_call("plan", text="version 2 shorter warm-up")), reply("Changed the warm-up."),   # revision
         reply("", call("ask_user", question="Save to the knowledge base?", options=["Yes", "No"])),      # final phase
-        reply("", call("write_memory", name="teacher-preferences.md", content="- prefers short warm-ups")),
+        reply("", call("add_memory", name="teacher-preferences.md", entry="prefers short warm-ups")),
         reply("Goodbye."),
     ]
 

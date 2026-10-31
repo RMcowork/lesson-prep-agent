@@ -15,6 +15,9 @@ effort = "high"            # how hard Claude thinks: low, medium, high, xhigh, m
                            # so it is set explicitly. Lower it only after the evals show quality holds (ticket #17).
 max_turns = 40             # most model calls in one turn of work
 
+# --- memory ----------------------------------------------------------------------------------
+memory_entry_chars = 600   # longest single line the agent may remember (it is asked to shorten longer ones)
+
 # --- web tools (only when the teacher allows web search) ---------------------------------------------
 web_results = 6                    # results returned by one search
 web_search_timeout_s = 10          # first attempt (DuckDuckGo directly)

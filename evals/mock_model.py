@@ -64,8 +64,8 @@ class OracleModel:
         after = [n for n, _ in self._after(messages, at)]
         if "ask_user" not in after:
             return call("ask_user", question="Do you want to save the final files to the knowledge base?", options=["Yes", "No"])
-        if "write_memory" not in after:
-            return call("write_memory", name="teacher-preferences.md", content=self._preference(notes[:-1]))
+        if "add_memory" not in after:
+            return call("add_memory", name="teacher-preferences.md", entry=self._preference(notes[:-1]))
         return Reply(text="Goodbye.")
 
     def _revision(self, messages, note, uses, call):

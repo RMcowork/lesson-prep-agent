@@ -19,10 +19,10 @@ def fresh_settings(monkeypatch):
 def data_dir(tmp_path, monkeypatch):
     """A private data folder, so a test can never touch the teacher's real files."""
     import agent.__main__ as app
-    import agent.tools as tools
+    import agent.memory as memory
 
     monkeypatch.setattr(app, "DATA", tmp_path)
-    monkeypatch.setattr(tools, "MEMORY_DIR", tmp_path / "memory")
+    monkeypatch.setattr(memory, "MEMORY_DIR", tmp_path / "memory")
     monkeypatch.setenv("AGENT_DATA_DIR", str(tmp_path))
     return tmp_path
 

@@ -57,8 +57,8 @@ def slug(text: str) -> str:
 FINAL_PHASE = (
     "The teacher is satisfied with the files. Now finish up: ask the teacher with ask_user whether "
     "to save the final files to the knowledge base (call add_to_knowledge if yes), then update memory "
-    "with write_memory: add the lesson to the lesson log, and save any preferences or corrections the "
-    "teacher asked for during this session. Then say a one-line goodbye."
+    "with add_memory: add one row for this lesson to the lesson log, and one line for each preference or "
+    "correction the teacher asked for during this session. Then say a one-line goodbye."
 )
 
 

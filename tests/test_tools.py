@@ -4,14 +4,14 @@ import socket
 
 import pytest
 
-from agent import tools
+from agent import memory, tools
 from agent.tools import TOOLS, ToolRunner
 from tests.helpers import ScriptedChannel
 
 
 @pytest.fixture
 def runner(tmp_path, monkeypatch):
-    monkeypatch.setattr(tools, "MEMORY_DIR", tmp_path / "memory")
+    monkeypatch.setattr(memory, "MEMORY_DIR", tmp_path / "memory")
     return ToolRunner(tmp_path / "out", ScriptedChannel())
 
 
@@ -82,20 +82,22 @@ def test_web_search_falls_back_and_then_degrades_gracefully(runner, monkeypatch)
     assert "No web results" in runner.run("web_search", {"query": "q"})
 
 
-# --- memory -----------------------------------------------------------------------------------------
-def test_memory_round_trip_and_only_three_files(runner):
+# --- memory (the safe operations are tested in tests/test_memory.py) --------------------------------
+def test_the_model_can_add_to_memory_but_not_replace_a_file(runner):
+    names = {t["name"] for t in runner.tools}
+    assert "add_memory" in names and "read_memory" in names
+    assert not {n for n in names if "write_memory" in n or "rewrite" in n or "replace" in n}
+    with pytest.raises(ValueError, match="Unknown tool"):
+        runner.run("write_memory", {"name": "lesson-log.md", "content": "everything"})
+
+
+def test_memory_round_trip_through_the_tools_and_only_three_files(runner):
     assert runner.run("read_memory", {"name": "lesson-log.md"}) == "(empty)"
-    runner.run("write_memory", {"name": "lesson-log.md", "content": "row"})
-    assert runner.run("read_memory", {"name": "lesson-log.md"}) == "row"
-    for bad in ("secrets.md", "INDEX.md", "../../etc/passwd"):
+    runner.run("add_memory", {"name": "teacher-preferences.md", "entry": "prefers short warm-ups"})
+    assert "- prefers short warm-ups" in runner.run("read_memory", {"name": "teacher-preferences.md"})
+    for bad in ("secrets.md", "INDEX.md"):
         with pytest.raises(ValueError):
-            runner.run("write_memory", {"name": bad, "content": "x"})
-
-
-def test_memory_path_traversal_cannot_leave_the_memory_folder(runner, tmp_path):
-    with pytest.raises(ValueError):
-        runner.run("read_memory", {"name": "../outside.md"})
-    assert not (tmp_path / "outside.md").exists()
+            runner.run("add_memory", {"name": bad, "entry": "x"})
 
 
 # --- files and versions (spec check 4) --------------------------------------------------------------

@@ -1,19 +1,15 @@
 """Tools the standalone agent can call."""
 import ipaddress
-import os
 import re
 import shutil
 import socket
 from pathlib import Path
 from urllib.parse import urlparse
 
-from . import docs, settings
+from . import docs, memory, settings
 from .channel import TerminalChannel
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = Path(os.environ.get("AGENT_DATA_DIR", ROOT)).resolve()
-MEMORY_DIR = DATA / "memory"
-MEMORY_FILES = {"teacher-preferences.md", "class-notes.md", "lesson-log.md"}
 
 BLOCKS_SCHEMA = {
     "type": "array",
@@ -85,12 +81,19 @@ TOOLS = [
         },
     },
     {
-        "name": "write_memory",
-        "description": "Replace the full content of a memory file. Read it first and keep existing entries.",
+        "name": "add_memory",
+        "description": (
+            "Remember ONE new fact: appends a single line to teacher-preferences.md, class-notes.md or lesson-log.md. "
+            "It only adds; it never replaces or removes earlier entries. For lesson-log.md the entry must be one table row: "
+            "| date | topic | language | files | feedback |. Never include student names or personal data."
+        ),
         "parameters": {
             "type": "object",
-            "properties": {"name": {"type": "string"}, "content": {"type": "string"}},
-            "required": ["name", "content"],
+            "properties": {
+                "name": {"type": "string", "enum": ["teacher-preferences.md", "class-notes.md", "lesson-log.md"]},
+                "entry": {"type": "string", "description": "One short line"},
+            },
+            "required": ["name", "entry"],
         },
     },
     {
@@ -261,21 +264,11 @@ class ToolRunner:
         return "UNTRUSTED WEB CONTENT:\n" + text[: s.web_fetch_chars]
 
     # --- memory ---
-    def _memory_path(self, name):
-        name = Path(name).name
-        if name not in MEMORY_FILES:
-            raise ValueError(f"Memory file must be one of {sorted(MEMORY_FILES)}")
-        return MEMORY_DIR / name
-
     def _t_read_memory(self, name):
-        path = self._memory_path(name)
-        return path.read_text(encoding="utf-8") if path.exists() else "(empty)"
+        return memory.read(name)
 
-    def _t_write_memory(self, name, content):
-        path = self._memory_path(name)
-        MEMORY_DIR.mkdir(exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-        return f"Saved {path.name}"
+    def _t_add_memory(self, name, entry):
+        return memory.add(name, entry)
 
     # --- interaction ---
     def _t_ask_user(self, question, options=None):

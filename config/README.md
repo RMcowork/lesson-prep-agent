@@ -23,6 +23,7 @@ An unknown key, a wrong type or an invalid value stops the program at start with
 | `max_tokens` | `8000` | Most the model may write in one reply | `agent/llm.py` |
 | `effort` | `high` | How hard Claude thinks: `low`, `medium`, `high`, `xhigh`, `max`, or empty for the model's own default. Sent only to Claude; the `openai` provider ignores it. A lower value is cheaper and faster, but change it only after the evals (#17) show quality holds. | `agent/llm.py` |
 | `max_turns` | `40` | Most model calls in one turn of work before the agent stops | `agent/loop.py` |
+| `memory_entry_chars` | `600` | Longest single line the agent may add to memory; a longer one is refused and the agent is asked to shorten it | `agent/memory.py` |
 | `web_results` | `6` | Results returned by one web search | `agent/tools.py` |
 | `web_search_timeout_s` | `10` | Seconds for the first search attempt | `agent/tools.py` |
 | `web_search_fallback_timeout_s` | `20` | Seconds for the second search attempt | `agent/tools.py` |

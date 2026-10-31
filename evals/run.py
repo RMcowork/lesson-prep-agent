@@ -126,8 +126,8 @@ def run_case(case, provider, workdir):
     channel = EvalChannel(case.get("teacher", []))
     runner = StubRunner(out_dir, channel, case)
     app.DATA = Path(workdir)
-    import agent.tools as tools_module
-    tools_module.MEMORY_DIR = Path(workdir) / "memory"
+    from agent import memory
+    memory.MEMORY_DIR = Path(workdir) / "memory"
     system = app.build_system()
     phase = case.get("phase", "lesson")
     meter, messages, task = Meter(), None, case["task"]
@@ -146,7 +146,7 @@ def run_case(case, provider, workdir):
     trace.said = "\n".join(texts + [a["question"] for a in channel.asks])
     trace.files = [p.name for p in out_dir.glob("*") if p.is_file()]
     mem = Path(workdir) / "memory"
-    trace.memory = "\n".join(c["input"].get("content", "") for c in runner.log if c["name"] == "write_memory" and not c["error"])
+    trace.memory = "\n".join(c["input"].get("entry", "") for c in runner.log if c["name"] == "add_memory" and not c["error"])
     fails = grader.grade(case["expect"], trace)
     return {"passed": not fails, "fails": fails, "tokens": {"input": meter.input_tokens, "output": meter.output_tokens}, "calls": meter.calls}
 

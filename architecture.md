@@ -23,7 +23,7 @@ flowchart LR
         direction TB
         R1["READ search_knowledge<br/>read_memory, ask_user"]
         R2["READ web_search, fetch_url<br/>off unless the teacher allows"]
-        W1["WRITE create_docx, create_xlsx, create_pptx<br/>add_to_knowledge, write_memory"]
+        W1["WRITE create_docx, create_xlsx, create_pptx<br/>add_to_knowledge, add_memory"]
     end
     subgraph L3["Layer 3: Storage, one volume"]
         FILES[("Files<br/>knowledge, output,<br/>memory, topics, logs")]
@@ -217,5 +217,6 @@ Date · choice · reason · what would change it.
 | 2026-10-31 | Tests mock the model; evals call the real model | Tests must be free, fast and identical every run; an agent is only "good enough" | Never |
 | 2026-10-31 | Evals use stubbed tools and scripted teacher answers | The environment is fixed, so a score change means the prompt or model changed | Real-tool evals are needed |
 | 2026-10-31 | $3 per day and 150,000 input tokens per job | Measured median 78,000 and maximum 107,000 per lesson | A month of real cost data |
+| 2026-10-31 | The model can only append one line to memory (`add_memory`); a full rewrite exists only as a human action | A whole-file write lost 2 of 3 notes in a test when the model did not read first, and rewrote the entire log at every finish; code must guarantee what a prompt can only ask | A teacher-facing memory menu needs edits (#37), which use `memory.rewrite` and keep the previous version |
 | 2026-10-31 | Deployment is out of scope for this phase | The course plan covers design, placement, management and tests first | The deployment phase starts |
 | 2026-10-31 | `spec.md` and `architecture.md` in lower case at the root; old documents moved to `docs/` | Course convention; case-sensitive Linux CI; the Mac treats `SPEC.md` and `spec.md` as one file | Never |

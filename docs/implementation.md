@@ -37,7 +37,7 @@ Both share the same `config/`, `knowledge/`, `memory/`, the RAG code (`rag/core.
 | `search_knowledge` | RAG search of the teacher's material, with `topic` and `source` filters |
 | `add_to_knowledge` | copy approved output files into `knowledge/generated/` and index them |
 | `web_search`, `fetch_url` | fresh examples and datasets; results are marked untrusted; only public http(s) URLs are fetched |
-| `read_memory`, `write_memory` | the three memory files only |
+| `read_memory`, `add_memory` | the three memory files only |
 | `ask_user` | questions shown as numbered choices (or buttons), plus "Type my own answer" |
 | `create_docx`, `create_xlsx`, `create_pptx` | file generation (python-docx, openpyxl, python-pptx) with RTL support (`agent/docs.py`) |
 

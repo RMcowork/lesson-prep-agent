@@ -21,7 +21,7 @@ def lesson_script():
         reply("", docx_call("lesson-plan", title="خطة الدرس", text="أنواع البيانات", rtl=True)),
         reply("Created the lesson plan."),
         reply("", call("ask_user", question="Save to the knowledge base?", options=["Yes", "No"])),
-        reply("", call("write_memory", name="lesson-log.md", content="| 2026 | Data types | Arabic |")),
+        reply("", call("add_memory", name="lesson-log.md", entry="| 2026-10-31 | Data types | Arabic | lesson-plan.docx | none yet |")),
         reply("Goodbye."),
     ]
 

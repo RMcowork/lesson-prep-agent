@@ -104,7 +104,7 @@ KNOWN_CHECKS = {
     "ask_user_question_contains_any", "files_created_any", "recreated", "all_calls_arg", "no_call_arg",
     "said_contains_any", "said_not_matches", "memory_contains_any", "memory_not_contains",
 }
-KNOWN_TOOLS = {"search_knowledge", "add_to_knowledge", "web_search", "fetch_url", "read_memory", "write_memory", "ask_user",
+KNOWN_TOOLS = {"search_knowledge", "add_to_knowledge", "web_search", "fetch_url", "read_memory", "add_memory", "ask_user",
                "create_docx", "create_xlsx", "create_pptx"}
 
 
